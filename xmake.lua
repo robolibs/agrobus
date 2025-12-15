@@ -30,10 +30,8 @@ if pkg_config then
     -- Split PKG_CONFIG_PATH by ':' and process each path
     for _, pkgconfig_path in ipairs(pkg_config:split(':')) do
         if os.isdir(pkgconfig_path) then
-            -- PKG_CONFIG_PATH typically points to .../lib/pkgconfig
-            -- We want to get the prefix (two levels up) to find include and lib
-            local lib_dir = path.directory(pkgconfig_path)  -- .../lib
-            local prefix_dir = path.directory(lib_dir)      -- .../
+            local lib_dir = path.directory(pkgconfig_path)
+            local prefix_dir = path.directory(lib_dir)
             local include_dir = path.join(prefix_dir, "include")
 
             if os.isdir(lib_dir) then
@@ -65,7 +63,6 @@ package("concord")
     set_sourcedir(path.join(os.projectdir(), "build/_deps/concord-src"))
 
     on_fetch(function (package)
-        -- Clone git repository if not exists
         local sourcedir = package:sourcedir()
         if not os.isdir(sourcedir) then
             print("Fetching concord from git...")
@@ -89,7 +86,6 @@ package("agisostack")
     set_sourcedir(path.join(os.projectdir(), "build/_deps/agisostack-src"))
 
     on_fetch(function (package)
-        -- Clone git repository if not exists
         local sourcedir = package:sourcedir()
         if not os.isdir(sourcedir) then
             print("Fetching AgIsoStack from git...")
@@ -106,10 +102,6 @@ package("agisostack")
         import("package.tools.cmake").install(package, configs)
     end)
 
-    on_load(function (package)
-        -- Ensure proper link order: Isobus, HardwareIntegration, Utility
-        package:add("links", "Isobus", "HardwareIntegration", "Utility")
-    end)
 package_end()
 
 -- Add required packages
@@ -123,19 +115,12 @@ end
 -- Main library target
 target("isobus")
     set_kind("static")
-
-    -- Add source files
     add_files("src/isobus/**.cpp")
-
-    -- Add header files
     add_headerfiles("include/(isobus/**.hpp)")
     add_includedirs("include", {public = true})
-
-    -- Link dependencies
     add_packages("concord", "agisostack")
     add_syslinks("pthread")
 
-    -- Set install files
     add_installfiles("include/(isobus/**.hpp)")
     on_install(function (target)
         local installdir = target:installdir()
@@ -152,7 +137,7 @@ if has_config("examples") and os.projectdir() == os.curdir() then
             add_files(filepath)
             add_deps("isobus")
             add_packages("concord", "agisostack")
-            add_links("Isobus", "HardwareIntegration", "Utility")
+            add_ldflags("-Wl,--start-group", "-lIsobus", "-lHardwareIntegration", "-lUtility", "-Wl,--end-group", {force = true})
             add_syslinks("pthread")
             add_includedirs("include")
         target_end()
@@ -168,11 +153,10 @@ if has_config("tests") and os.projectdir() == os.curdir() then
             add_files(filepath)
             add_deps("isobus")
             add_packages("concord", "agisostack", "doctest")
+            add_ldflags("-Wl,--start-group", "-lIsobus", "-lHardwareIntegration", "-lUtility", "-Wl,--end-group", {force = true})
             add_syslinks("pthread")
             add_includedirs("include")
             add_defines("DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN")
-
-            -- Add as test
             add_tests("default", {rundir = os.projectdir()})
         target_end()
     end
@@ -182,13 +166,8 @@ end
 task("cmake")
     on_run(function ()
         import("core.project.config")
-
-        -- Load configuration
         config.load()
-
-        -- Generate CMakeLists.txt
         os.exec("xmake project -k cmakelists")
-
         print("CMakeLists.txt generated successfully!")
     end)
 
