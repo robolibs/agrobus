@@ -83,8 +83,33 @@ package("concord")
     end)
 package_end()
 
+-- Define AgIsoStack package (from git)
+package("agisostack")
+    add_deps("cmake")
+    set_sourcedir(path.join(os.projectdir(), "build/_deps/agisostack-src"))
+
+    on_fetch(function (package)
+        -- Clone git repository if not exists
+        local sourcedir = package:sourcedir()
+        if not os.isdir(sourcedir) then
+            print("Fetching AgIsoStack from git...")
+            os.mkdir(path.directory(sourcedir))
+            os.execv("git", {"clone", "--quiet", "--depth", "1", "--branch", "main",
+                            "-c", "advice.detachedHead=false",
+                            "https://github.com/Open-Agriculture/AgIsoStack-plus-plus.git", sourcedir})
+        end
+    end)
+
+    on_install(function (package)
+        local configs = {}
+        table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:is_debug() and "Debug" or "Release"))
+        import("package.tools.cmake").install(package, configs)
+    end)
+package_end()
+
 -- Add required packages
 add_requires("concord")
+add_requires("agisostack")
 
 if has_config("tests") then
     add_requires("doctest")
@@ -102,7 +127,8 @@ target("isobus")
     add_includedirs("include", {public = true})
 
     -- Link dependencies
-    add_packages("concord")
+    add_packages("concord", "agisostack")
+    add_syslinks("pthread")
 
     -- Set install files
     add_installfiles("include/(isobus/**.hpp)")
@@ -120,7 +146,8 @@ if has_config("examples") and os.projectdir() == os.curdir() then
             set_kind("binary")
             add_files(filepath)
             add_deps("isobus")
-            add_packages("concord")
+            add_packages("concord", "agisostack")
+            add_syslinks("pthread")
             add_includedirs("include")
         target_end()
     end
@@ -134,7 +161,8 @@ if has_config("tests") and os.projectdir() == os.curdir() then
             set_kind("binary")
             add_files(filepath)
             add_deps("isobus")
-            add_packages("concord", "doctest")
+            add_packages("concord", "agisostack", "doctest")
+            add_syslinks("pthread")
             add_includedirs("include")
             add_defines("DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN")
 

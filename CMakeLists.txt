@@ -29,6 +29,15 @@ FetchContent_Declare(concord GIT_REPOSITORY https://github.com/onlyhead/concord.
 FetchContent_MakeAvailable(concord)
 list(APPEND ext_deps concord::concord)
 
+find_package(Threads REQUIRED)
+FetchContent_Declare(
+  AgIsoStack
+  GIT_REPOSITORY https://github.com/Open-Agriculture/AgIsoStack-plus-plus.git
+  GIT_TAG        main
+)
+FetchContent_MakeAvailable(AgIsoStack)
+list(APPEND ext_deps isobus::Isobus isobus::HardwareIntegration isobus::Utility Threads::Threads)
+
 # --------------------------------------------------------------------------------------------------
 # Build library
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
