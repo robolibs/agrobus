@@ -1,4 +1,4 @@
-#include "tractor/comms/serial.hpp"
+#include "tractor/comms/tty.hpp"
 #include <chrono>
 #include <doctest/doctest.h>
 #include <thread>
@@ -33,12 +33,12 @@ TEST_CASE("Serial Configuration Tests") {
 
 TEST_CASE("Serial Construction Tests") {
     SUBCASE("Default constructor") {
-        Serial serial;
+        Tty serial;
         CHECK_FALSE(serial.is_open());
     }
 
     SUBCASE("Constructor with port and baud rate") {
-        Serial serial("/dev/ttyUSB0", 115200);
+        Tty serial("/dev/ttyUSB0", 115200);
         CHECK_FALSE(serial.is_open());
         CHECK(serial.get_port() == "/dev/ttyUSB0");
         CHECK(serial.get_baud_rate() == 115200);
@@ -49,7 +49,7 @@ TEST_CASE("Serial Construction Tests") {
         config.baud_rate = 9600;
         config.data_bits = DataBits::Eight;
 
-        Serial serial("/dev/ttyACM0", config);
+        Tty serial("/dev/ttyACM0", config);
         CHECK_FALSE(serial.is_open());
         CHECK(serial.get_port() == "/dev/ttyACM0");
     }
@@ -57,16 +57,16 @@ TEST_CASE("Serial Construction Tests") {
 
 TEST_CASE("Serial Move Semantics") {
     SUBCASE("Move constructor") {
-        Serial serial1("/dev/ttyUSB0", 115200);
-        Serial serial2(std::move(serial1));
+        Tty serial1("/dev/ttyUSB0", 115200);
+        Tty serial2(std::move(serial1));
 
         CHECK(serial2.get_port() == "/dev/ttyUSB0");
         CHECK(serial2.get_baud_rate() == 115200);
     }
 
     SUBCASE("Move assignment") {
-        Serial serial1("/dev/ttyUSB0", 115200);
-        Serial serial2;
+        Tty serial1("/dev/ttyUSB0", 115200);
+        Tty serial2;
 
         serial2 = std::move(serial1);
 
@@ -77,7 +77,7 @@ TEST_CASE("Serial Move Semantics") {
 
 TEST_CASE("Serial Port Discovery") {
     SUBCASE("List ports") {
-        auto ports = Serial::list_ports();
+        auto ports = Tty::list_ports();
         // Just verify the function doesn't crash
         // The actual result depends on the system
         CHECK(ports.size() >= 0);
@@ -85,12 +85,12 @@ TEST_CASE("Serial Port Discovery") {
 
     SUBCASE("Port exists check") {
         // Test with a path that definitely doesn't exist
-        CHECK_FALSE(Serial::port_exists("/dev/ttyNONEXISTENT999"));
+        CHECK_FALSE(Tty::port_exists("/dev/ttyNONEXISTENT999"));
     }
 }
 
 TEST_CASE("Serial Configuration Setters") {
-    Serial serial;
+    Tty serial;
 
     SUBCASE("Set baud rate when closed") {
         CHECK(serial.set_baud_rate(115200));
@@ -148,7 +148,7 @@ TEST_CASE("Serial Configuration Setters") {
 }
 
 TEST_CASE("Serial Error Handling") {
-    Serial serial;
+    Tty serial;
 
     SUBCASE("Write to closed port") {
         std::string data = "test";
@@ -181,13 +181,13 @@ TEST_CASE("Serial Error Handling") {
 }
 
 TEST_CASE("Serial File Descriptor") {
-    Serial serial;
+    Tty serial;
 
     SUBCASE("FD when closed") { CHECK(serial.get_fd() == -1); }
 }
 
 TEST_CASE("Serial Buffer Operations") {
-    Serial serial;
+    Tty serial;
 
     SUBCASE("Flush operations on closed port (should not crash)") {
         serial.flush_input();
@@ -199,7 +199,7 @@ TEST_CASE("Serial Buffer Operations") {
 }
 
 TEST_CASE("Serial Write Variants") {
-    Serial serial;
+    Tty serial;
 
     SUBCASE("Write with null data") {
         ssize_t result = serial.write(nullptr, 10);
@@ -228,7 +228,7 @@ TEST_CASE("Serial Write Variants") {
 }
 
 TEST_CASE("Serial Read Variants") {
-    Serial serial;
+    Tty serial;
 
     SUBCASE("Read with null buffer") {
         ssize_t result = serial.read(nullptr, 10);
@@ -260,13 +260,13 @@ TEST_CASE("Serial Read Variants") {
 // or virtual serial port pairs (e.g., using socat)
 TEST_CASE("Serial Open Tests") {
     SUBCASE("Open non-existent port") {
-        Serial serial("/dev/ttyNONEXISTENT999", 115200);
+        Tty serial("/dev/ttyNONEXISTENT999", 115200);
         CHECK_FALSE(serial.open());
         CHECK_FALSE(serial.get_last_error().empty());
     }
 
     SUBCASE("Open without port specified") {
-        Serial serial;
+        Tty serial;
         CHECK_FALSE(serial.open());
         CHECK_FALSE(serial.get_last_error().empty());
     }

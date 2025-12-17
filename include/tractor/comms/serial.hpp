@@ -1,361 +1,212 @@
 #pragma once
 
-#include <chrono>
-#include <cstdint>
+#include "tractor/comms/tty.hpp"
+#include <atomic>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace tractor {
     namespace comms {
 
         /**
-         * @brief Parity configuration for serial communication
+         * @brief Callback function for received lines
+         * @param line The received line (without delimiter)
          */
-        enum class Parity { None, Odd, Even, Mark, Space };
+        using LineCallback = std::function<void(const std::string &line)>;
 
         /**
-         * @brief Stop bits configuration
+         * @brief Callback function for received binary data
+         * @param data The received data
          */
-        enum class StopBits { One, OnePointFive, Two };
+        using DataCallback = std::function<void(const std::vector<uint8_t> &data)>;
 
         /**
-         * @brief Data bits configuration
+         * @brief Callback function for connection events
+         * @param connected true if connected, false if disconnected
          */
-        enum class DataBits { Five = 5, Six = 6, Seven = 7, Eight = 8 };
+        using ConnectionCallback = std::function<void(bool connected)>;
 
         /**
-         * @brief Flow control configuration
+         * @brief Callback function for errors
+         * @param error_message Description of the error
          */
-        enum class FlowControl { None, Hardware, Software };
+        using ErrorCallback = std::function<void(const std::string &error_message)>;
 
         /**
-         * @brief Serial port configuration structure
+         * @brief Message framing mode for serial communication
          */
-        struct SerialConfig {
-            uint32_t baud_rate = 9600;
-            DataBits data_bits = DataBits::Eight;
-            Parity parity = Parity::None;
-            StopBits stop_bits = StopBits::One;
-            FlowControl flow_control = FlowControl::None;
-            uint32_t read_timeout_ms = 1000;
-            uint32_t write_timeout_ms = 1000;
-            bool vmin_mode = false; // If true, uses VMIN/VTIME instead of timeout
-            uint8_t vmin = 1;       // Minimum characters to read
-            uint8_t vtime = 0;      // Time between characters (in deciseconds)
+        enum class FramingMode {
+            LineDelimited,  // Messages separated by line delimiter (\n, \r\n, etc.)
+            FixedLength,    // Fixed-length messages
+            LengthPrefixed, // Length prefix followed by data
+            Custom          // Custom delimiter byte
         };
 
         /**
-         * @brief Comprehensive serial port abstraction class
+         * @brief Configuration for high-level serial communication
+         */
+        struct SerialOptions {
+            std::string port;
+            SerialConfig tty_config;
+
+            FramingMode framing = FramingMode::LineDelimited;
+            char line_delimiter = '\n';   // For LineDelimited mode
+            size_t fixed_length = 0;      // For FixedLength mode
+            uint8_t custom_delimiter = 0; // For Custom mode
+
+            bool auto_reconnect = false;
+            uint32_t reconnect_delay_ms = 1000;
+            size_t max_line_length = 4096;
+            bool strip_line_endings = true; // Remove \r\n from lines
+        };
+
+        /**
+         * @brief High-level serial port communication class
          *
-         * Supports communication over ttyUSB, ttyS, ttyACM, and other serial devices.
-         * Provides both blocking and non-blocking I/O operations with configurable timeouts.
+         * Provides an event-driven, thread-safe interface for serial communication with:
+         * - Automatic message framing (line-based, length-prefixed, etc.)
+         * - Callback-based event handling
+         * - Thread-safe write operations
+         * - Optional automatic reconnection
+         * - Background reading thread
          */
         class Serial {
           public:
             /**
-             * @brief Default constructor
+             * @brief Constructor
+             * @param options Serial communication options
              */
-            Serial();
+            explicit Serial(const SerialOptions &options);
 
             /**
-             * @brief Constructor with port and baud rate
-             * @param port Serial port device path (e.g., "/dev/ttyUSB0")
-             * @param baud_rate Communication speed in bits per second
+             * @brief Simplified constructor for line-based communication
+             * @param port Serial port path
+             * @param baud_rate Baud rate
              */
-            Serial(const std::string &port, uint32_t baud_rate = 9600);
+            Serial(const std::string &port, uint32_t baud_rate = 115200);
 
             /**
-             * @brief Constructor with full configuration
-             * @param port Serial port device path
-             * @param config Serial port configuration
-             */
-            Serial(const std::string &port, const SerialConfig &config);
-
-            /**
-             * @brief Destructor - automatically closes the port
+             * @brief Destructor
              */
             ~Serial();
 
-            // Delete copy constructor and assignment
+            // Delete copy
             Serial(const Serial &) = delete;
             Serial &operator=(const Serial &) = delete;
 
-            // Allow move semantics
-            Serial(Serial &&other) noexcept;
-            Serial &operator=(Serial &&other) noexcept;
+            /**
+             * @brief Start serial communication
+             * @return true if successfully started, false otherwise
+             */
+            bool start();
 
             /**
-             * @brief Open the serial port
+             * @brief Stop serial communication
+             */
+            void stop();
+
+            /**
+             * @brief Check if serial communication is active
+             * @return true if running, false otherwise
+             */
+            bool is_running() const;
+
+            /**
+             * @brief Check if currently connected to the port
+             * @return true if connected, false otherwise
+             */
+            bool is_connected() const;
+
+            /**
+             * @brief Write a line (automatically appends line ending)
+             * @param line Line to write
              * @return true if successful, false otherwise
              */
-            bool open();
+            bool write_line(const std::string &line);
 
             /**
-             * @brief Open a specific serial port
-             * @param port Serial port device path
+             * @brief Write raw data
+             * @param data Data to write
              * @return true if successful, false otherwise
              */
-            bool open(const std::string &port);
+            bool write(const std::vector<uint8_t> &data);
 
             /**
-             * @brief Open with specific configuration
-             * @param port Serial port device path
-             * @param config Serial port configuration
-             * @return true if successful, false otherwise
-             */
-            bool open(const std::string &port, const SerialConfig &config);
-
-            /**
-             * @brief Close the serial port
-             */
-            void close();
-
-            /**
-             * @brief Check if the port is currently open
-             * @return true if open, false otherwise
-             */
-            bool is_open() const;
-
-            /**
-             * @brief Write data to the serial port
-             * @param data Data buffer to write
-             * @param size Number of bytes to write
-             * @return Number of bytes actually written, -1 on error
-             */
-            ssize_t write(const uint8_t *data, size_t size);
-
-            /**
-             * @brief Write data to the serial port
-             * @param data Vector of bytes to write
-             * @return Number of bytes actually written, -1 on error
-             */
-            ssize_t write(const std::vector<uint8_t> &data);
-
-            /**
-             * @brief Write string to the serial port
+             * @brief Write string data
              * @param data String to write
-             * @return Number of bytes actually written, -1 on error
-             */
-            ssize_t write(const std::string &data);
-
-            /**
-             * @brief Read data from the serial port
-             * @param buffer Buffer to store read data
-             * @param size Maximum number of bytes to read
-             * @return Number of bytes actually read, -1 on error, 0 on timeout
-             */
-            ssize_t read(uint8_t *buffer, size_t size);
-
-            /**
-             * @brief Read data into a vector
-             * @param buffer Vector to store read data
-             * @param size Maximum number of bytes to read
-             * @return Number of bytes actually read, -1 on error, 0 on timeout
-             */
-            ssize_t read(std::vector<uint8_t> &buffer, size_t size);
-
-            /**
-             * @brief Read until a delimiter is found
-             * @param delimiter Byte to use as delimiter
-             * @param max_size Maximum bytes to read
-             * @return Vector containing read data including delimiter, empty on error/timeout
-             */
-            std::vector<uint8_t> read_until(uint8_t delimiter, size_t max_size = 1024);
-
-            /**
-             * @brief Read a line (until '\n')
-             * @param max_size Maximum bytes to read
-             * @return String containing the line (without '\n'), empty on error/timeout
-             */
-            std::string read_line(size_t max_size = 1024);
-
-            /**
-             * @brief Read exactly the specified number of bytes
-             * @param buffer Buffer to store read data
-             * @param size Exact number of bytes to read
-             * @param timeout_ms Timeout in milliseconds (0 = use default)
-             * @return Number of bytes read (equals size on success), less on timeout/error
-             */
-            ssize_t read_exact(uint8_t *buffer, size_t size, uint32_t timeout_ms = 0);
-
-            /**
-             * @brief Read exactly the specified number of bytes into a vector
-             * @param size Exact number of bytes to read
-             * @param timeout_ms Timeout in milliseconds (0 = use default)
-             * @return Vector containing read data (size equals requested on success)
-             */
-            std::vector<uint8_t> read_exact(size_t size, uint32_t timeout_ms = 0);
-
-            /**
-             * @brief Get the number of bytes available to read
-             * @return Number of bytes available, -1 on error
-             */
-            ssize_t available() const;
-
-            /**
-             * @brief Flush input buffer (discard all received data)
-             */
-            void flush_input();
-
-            /**
-             * @brief Flush output buffer (wait for all data to be transmitted)
-             */
-            void flush_output();
-
-            /**
-             * @brief Flush both input and output buffers
-             */
-            void flush();
-
-            /**
-             * @brief Set the baud rate
-             * @param baud_rate Baud rate in bits per second
              * @return true if successful, false otherwise
              */
-            bool set_baud_rate(uint32_t baud_rate);
+            bool write(const std::string &data);
 
             /**
-             * @brief Get current baud rate
-             * @return Current baud rate
+             * @brief Set callback for received lines (LineDelimited mode)
+             * @param callback Function to call when a line is received
              */
-            uint32_t get_baud_rate() const;
+            void on_line(LineCallback callback);
 
             /**
-             * @brief Set read timeout
-             * @param timeout_ms Timeout in milliseconds
+             * @brief Set callback for received data (other framing modes)
+             * @param callback Function to call when data is received
              */
-            void set_read_timeout(uint32_t timeout_ms);
+            void on_data(DataCallback callback);
 
             /**
-             * @brief Set write timeout
-             * @param timeout_ms Timeout in milliseconds
+             * @brief Set callback for connection state changes
+             * @param callback Function to call on connect/disconnect
              */
-            void set_write_timeout(uint32_t timeout_ms);
+            void on_connection(ConnectionCallback callback);
 
             /**
-             * @brief Set data bits
-             * @param data_bits Number of data bits (5-8)
-             * @return true if successful, false otherwise
+             * @brief Set callback for errors
+             * @param callback Function to call on errors
              */
-            bool set_data_bits(DataBits data_bits);
+            void on_error(ErrorCallback callback);
 
             /**
-             * @brief Set parity
-             * @param parity Parity mode
-             * @return true if successful, false otherwise
+             * @brief Get statistics
              */
-            bool set_parity(Parity parity);
+            struct Statistics {
+                size_t lines_received = 0;
+                size_t bytes_received = 0;
+                size_t bytes_sent = 0;
+                size_t errors = 0;
+                size_t reconnects = 0;
+            };
+
+            Statistics get_statistics() const;
 
             /**
-             * @brief Set stop bits
-             * @param stop_bits Number of stop bits
-             * @return true if successful, false otherwise
+             * @brief Reset statistics counters
              */
-            bool set_stop_bits(StopBits stop_bits);
+            void reset_statistics();
 
             /**
-             * @brief Set flow control
-             * @param flow_control Flow control mode
-             * @return true if successful, false otherwise
+             * @brief Get current options
+             * @return Current serial options
              */
-            bool set_flow_control(FlowControl flow_control);
+            SerialOptions get_options() const;
 
             /**
-             * @brief Apply a complete configuration
-             * @param config Configuration to apply
-             * @return true if successful, false otherwise
+             * @brief Get the underlying TTY device (for advanced usage)
+             * @return Pointer to TTY device, or nullptr if not connected
              */
-            bool apply_config(const SerialConfig &config);
-
-            /**
-             * @brief Get current configuration
-             * @return Current serial configuration
-             */
-            SerialConfig get_config() const;
-
-            /**
-             * @brief Get the port device path
-             * @return Port path string
-             */
-            std::string get_port() const;
-
-            /**
-             * @brief Get the last error message
-             * @return Error message string
-             */
-            std::string get_last_error() const;
-
-            /**
-             * @brief List available serial ports
-             * @return Vector of available port paths
-             */
-            static std::vector<std::string> list_ports();
-
-            /**
-             * @brief Check if a port exists
-             * @param port Port path to check
-             * @return true if port exists, false otherwise
-             */
-            static bool port_exists(const std::string &port);
-
-            /**
-             * @brief Set DTR (Data Terminal Ready) line
-             * @param state true to set high, false to set low
-             * @return true if successful, false otherwise
-             */
-            bool set_dtr(bool state);
-
-            /**
-             * @brief Set RTS (Request To Send) line
-             * @param state true to set high, false to set low
-             * @return true if successful, false otherwise
-             */
-            bool set_rts(bool state);
-
-            /**
-             * @brief Get CTS (Clear To Send) line state
-             * @return true if high, false if low or on error
-             */
-            bool get_cts() const;
-
-            /**
-             * @brief Get DSR (Data Set Ready) line state
-             * @return true if high, false if low or on error
-             */
-            bool get_dsr() const;
-
-            /**
-             * @brief Get RI (Ring Indicator) line state
-             * @return true if high, false if low or on error
-             */
-            bool get_ri() const;
-
-            /**
-             * @brief Get CD (Carrier Detect) line state
-             * @return true if high, false if low or on error
-             */
-            bool get_cd() const;
-
-            /**
-             * @brief Send a break signal
-             * @param duration_ms Duration in milliseconds (0 = default ~250ms)
-             */
-            void send_break(uint32_t duration_ms = 0);
-
-            /**
-             * @brief Get native file descriptor (for advanced usage)
-             * @return File descriptor or -1 if not open
-             */
-            int get_fd() const;
+            Tty *get_tty();
 
           private:
-            class Impl;
+            struct Impl;
             std::unique_ptr<Impl> pimpl_;
 
-            bool configure_port();
-            bool set_termios_baud(uint32_t baud_rate);
+            void reader_thread();
+            bool connect();
+            void disconnect();
+            void process_line_delimited();
+            void process_fixed_length();
+            void process_length_prefixed();
+            void process_custom();
         };
 
     } // namespace comms

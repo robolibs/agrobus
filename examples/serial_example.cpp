@@ -1,4 +1,4 @@
-#include "tractor/comms/serial.hpp"
+#include "tractor/comms/tty.hpp"
 #include <chrono>
 #include <iostream>
 #include <thread>
@@ -9,7 +9,7 @@ void example_basic_usage() {
     std::cout << "=== Basic Serial Usage Example ===\n" << std::endl;
 
     // Create serial port with default settings
-    Serial serial("/dev/ttyUSB0", 115200);
+    Tty serial("/dev/ttyUSB0", 115200);
 
     // Open the port
     if (!serial.open()) {
@@ -51,7 +51,7 @@ void example_advanced_config() {
     config.read_timeout_ms = 2000;
     config.write_timeout_ms = 2000;
 
-    Serial serial("/dev/ttyACM0", config);
+    Tty serial("/dev/ttyACM0", config);
 
     if (!serial.open()) {
         std::cerr << "Failed to open port: " << serial.get_last_error() << std::endl;
@@ -70,7 +70,7 @@ void example_advanced_config() {
 void example_read_line() {
     std::cout << "\n=== Read Line Example ===\n" << std::endl;
 
-    Serial serial("/dev/ttyUSB0", 115200);
+    Tty serial("/dev/ttyUSB0", 115200);
 
     if (!serial.open()) {
         std::cerr << "Failed to open port: " << serial.get_last_error() << std::endl;
@@ -95,7 +95,7 @@ void example_read_line() {
 void example_read_exact() {
     std::cout << "\n=== Read Exact Bytes Example ===\n" << std::endl;
 
-    Serial serial("/dev/ttyUSB0", 115200);
+    Tty serial("/dev/ttyUSB0", 115200);
 
     if (!serial.open()) {
         std::cerr << "Failed to open port: " << serial.get_last_error() << std::endl;
@@ -122,7 +122,7 @@ void example_read_exact() {
 void example_control_lines() {
     std::cout << "\n=== Control Lines Example ===\n" << std::endl;
 
-    Serial serial("/dev/ttyUSB0", 115200);
+    Tty serial("/dev/ttyUSB0", 115200);
 
     if (!serial.open()) {
         std::cerr << "Failed to open port: " << serial.get_last_error() << std::endl;
@@ -150,7 +150,7 @@ void example_control_lines() {
 void example_list_ports() {
     std::cout << "\n=== List Available Ports ===\n" << std::endl;
 
-    auto ports = Serial::list_ports();
+    auto ports = Tty::list_ports();
 
     if (ports.empty()) {
         std::cout << "No serial ports found" << std::endl;
@@ -158,7 +158,7 @@ void example_list_ports() {
         std::cout << "Available serial ports:" << std::endl;
         for (const auto &port : ports) {
             std::cout << "  - " << port;
-            if (Serial::port_exists(port)) {
+            if (Tty::port_exists(port)) {
                 std::cout << " (exists)";
             }
             std::cout << std::endl;
@@ -169,7 +169,7 @@ void example_list_ports() {
 void example_binary_data() {
     std::cout << "\n=== Binary Data Transfer Example ===\n" << std::endl;
 
-    Serial serial("/dev/ttyUSB0", 115200);
+    Tty serial("/dev/ttyUSB0", 115200);
 
     if (!serial.open()) {
         std::cerr << "Failed to open port: " << serial.get_last_error() << std::endl;

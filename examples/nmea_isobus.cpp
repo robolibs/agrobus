@@ -104,67 +104,18 @@ bool parse_phtg(const std::string &sentence, PHTGData &data) {
     return field >= 6;
 }
 
-void serial_reader_thread(const char *device, int baud) {
-    using namespace tractor::comms;
+void process_nmea_line(const std::string &line) {
+    // Only process PHTG messages
+    if (line.substr(0, 5) == "$PHTG") {
+        PHTGData phtg;
+        if (parse_phtg(line, phtg)) {
+            std::cout << "PHTG: [" << phtg.date << " " << phtg.time << "] " << phtg.system << "/" << phtg.service
+                      << " Auth=" << phtg.auth_result << " Warn=" << phtg.warning << "\n";
 
-    // Configure serial port with short timeout for responsive shutdown
-    SerialConfig config;
-    config.baud_rate = baud;
-    config.data_bits = DataBits::Eight;
-    config.parity = Parity::None;
-    config.stop_bits = StopBits::One;
-    config.flow_control = FlowControl::None;
-    config.read_timeout_ms = 100; // 100ms timeout for responsive shutdown
-
-    Serial serial(device, config);
-
-    if (!serial.open()) {
-        std::cerr << "Failed to open serial port: " << device << "\n";
-        std::cerr << "Error: " << serial.get_last_error() << "\n";
-        return;
-    }
-
-    std::cout << "Serial port opened: " << device << " @ " << baud << " baud\n";
-
-    std::string sentence;
-    uint8_t ch;
-
-    while (running) {
-        // Read one byte at a time with timeout
-        ssize_t bytes_read = serial.read(&ch, 1);
-
-        if (bytes_read <= 0) {
-            // Timeout or error - continue to check running flag
-            continue;
-        }
-
-        // Build NMEA sentence character by character
-        if (ch == '$') {
-            sentence = "$";
-        } else if (ch == '\n') {
-            // End of sentence
-            if (!sentence.empty()) {
-                // Process complete sentence
-                if (sentence.substr(0, 5) == "$PHTG") {
-                    PHTGData phtg;
-                    if (parse_phtg(sentence, phtg)) {
-                        std::cout << "PHTG: [" << phtg.date << " " << phtg.time << "] " << phtg.system << "/"
-                                  << phtg.service << " Auth=" << phtg.auth_result << " Warn=" << phtg.warning << "\n";
-
-                        gnss_auth_status.store(phtg.auth_result);
-                        gnss_warning.store(phtg.warning);
-                    }
-                }
-                sentence.clear();
-            }
-        } else if (!sentence.empty()) {
-            // Append to current sentence
-            sentence += static_cast<char>(ch);
+            gnss_auth_status.store(phtg.auth_result);
+            gnss_warning.store(phtg.warning);
         }
     }
-
-    serial.close();
-    std::cout << "Serial port closed\n";
 }
 
 bool create_simple_ddop(std::shared_ptr<isobus::DeviceDescriptorObjectPool> ddop, isobus::NAME clientName) {
@@ -331,7 +282,25 @@ int main(int argc, char **argv) {
     tc->configure(ddop, 1, 0, 0, true, false, false, false, false);
     tc->initialize(true);
 
-    std::thread serial_thread(serial_reader_thread, serial_device, serial_baud);
+    // Set up high-level serial communication
+    auto nmea_serial = std::make_shared<tractor::comms::Serial>(serial_device, serial_baud);
+
+    nmea_serial->on_line([](const std::string &line) { process_nmea_line(line); });
+
+    nmea_serial->on_connection([](bool connected) {
+        if (connected) {
+            std::cout << "Serial port connected\n";
+        } else {
+            std::cout << "Serial port disconnected\n";
+        }
+    });
+
+    nmea_serial->on_error([](const std::string &error) { std::cerr << "Serial error: " << error << "\n"; });
+
+    if (!nmea_serial->start()) {
+        std::cerr << "Failed to start serial communication\n";
+        return -1;
+    }
 
     std::cout << "Running... Press Ctrl+C to exit\n\n";
 
@@ -341,11 +310,7 @@ int main(int argc, char **argv) {
 
     std::cout << "\nShutting down...\n";
 
-    running = false;
-    if (serial_thread.joinable()) {
-        serial_thread.join();
-    }
-
+    nmea_serial->stop();
     tc->terminate();
     isobus::CANHardwareInterface::stop();
 

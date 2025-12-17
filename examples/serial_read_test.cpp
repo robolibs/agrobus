@@ -1,7 +1,9 @@
 #include "tractor/comms/serial.hpp"
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <iostream>
+#include <thread>
 
 static std::atomic_bool running = true;
 
@@ -14,77 +16,54 @@ int main(int argc, char **argv) {
     const char *port = (argc > 1) ? argv[1] : "/tmp/ttyV0";
     int baud = (argc > 2) ? std::atoi(argv[2]) : 115200;
 
-    std::cout << "Serial Read Test\n";
-    std::cout << "================\n";
+    std::cout << "Serial Read Test (High-Level API)\n";
+    std::cout << "==================================\n";
     std::cout << "Port: " << port << "\n";
     std::cout << "Baud: " << baud << "\n";
     std::cout << "Press Ctrl+C to exit\n\n";
 
-    // Configure serial port
-    SerialConfig config;
-    config.baud_rate = baud;
-    config.data_bits = DataBits::Eight;
-    config.parity = Parity::None;
-    config.stop_bits = StopBits::One;
-    config.flow_control = FlowControl::None;
-    config.read_timeout_ms = 100; // 100ms timeout for responsive exit
+    // Create high-level serial object
+    Serial serial(port, baud);
 
-    Serial serial(port, config);
+    // Set up callbacks
+    serial.on_line([](const std::string &line) { std::cout << "RX: " << line << "\n"; });
 
-    // Open serial port
-    if (!serial.open()) {
-        std::cerr << "Failed to open serial port: " << port << "\n";
-        std::cerr << "Error: " << serial.get_last_error() << "\n";
-        return 1;
-    }
+    serial.on_connection([](bool connected) {
+        if (connected) {
+            std::cout << "Connected to serial port!\n";
+        } else {
+            std::cout << "Disconnected from serial port\n";
+        }
+    });
 
-    std::cout << "Serial port opened successfully!\n";
-    std::cout << "Listening for data...\n\n";
+    serial.on_error([](const std::string &error) { std::cerr << "Error: " << error << "\n"; });
 
     // Setup signal handler for clean exit
     std::signal(SIGINT, signal_handler);
 
-    std::string line;
-    uint8_t ch;
-    size_t bytes_received = 0;
+    // Start serial communication
+    if (!serial.start()) {
+        std::cerr << "Failed to start serial communication\n";
+        return 1;
+    }
 
+    std::cout << "Listening for lines...\n\n";
+
+    // Main loop - just wait for Ctrl+C
     while (running) {
-        ssize_t bytes_read = serial.read(&ch, 1);
-
-        if (bytes_read > 0) {
-            bytes_received++;
-
-            // Echo the character
-            if (ch >= 32 && ch <= 126) {
-                // Printable ASCII
-                std::cout << static_cast<char>(ch) << std::flush;
-                line += static_cast<char>(ch);
-            } else if (ch == '\n') {
-                // Newline - print the complete line
-                std::cout << "\n";
-                if (!line.empty()) {
-                    std::cout << "[Line complete: " << line.length() << " chars]\n";
-                    line.clear();
-                }
-            } else if (ch == '\r') {
-                // Carriage return - just ignore or handle
-                std::cout << std::flush;
-            } else {
-                // Non-printable character - show as hex
-                std::cout << "[0x" << std::hex << static_cast<int>(ch) << std::dec << "]" << std::flush;
-            }
-        } else if (bytes_read < 0) {
-            // Error
-            std::cerr << "\nRead error: " << serial.get_last_error() << "\n";
-            break;
-        }
-        // bytes_read == 0 means timeout, just continue
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     std::cout << "\n\nShutting down...\n";
-    std::cout << "Total bytes received: " << bytes_received << "\n";
 
-    serial.close();
+    auto stats = serial.get_statistics();
+    std::cout << "Statistics:\n";
+    std::cout << "  Lines received: " << stats.lines_received << "\n";
+    std::cout << "  Bytes received: " << stats.bytes_received << "\n";
+    std::cout << "  Bytes sent:     " << stats.bytes_sent << "\n";
+    std::cout << "  Errors:         " << stats.errors << "\n";
+
+    serial.stop();
     std::cout << "Serial port closed.\n";
 
     return 0;
