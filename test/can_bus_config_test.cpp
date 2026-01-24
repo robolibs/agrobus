@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/core/can_bus_config.hpp>
+#include <agrobus/net/can_bus_config.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("CAN bus config - default config is compliant") {
     CanBusConfig config;

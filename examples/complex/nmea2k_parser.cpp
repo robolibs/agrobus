@@ -11,12 +11,12 @@
 //   - Coordinate frame conversions (WGS84 -> ENU/NED)
 //   - Polling latest cached position from the interface
 
-#include <isobus/network/network_manager.hpp>
-#include <isobus/nmea/interface.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/nmea/interface.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::nmea;
+using namespace agrobus::net;
+using namespace agrobus::nmea;
 
 // ─── Unit Conversion Helpers ─────────────────────────────────────────────────
 // These functions convert raw NMEA2000 values (SI units) to more human-readable
@@ -102,7 +102,7 @@ int main() {
     // In a real application, you would attach a CAN driver (SocketCAN, SPI, etc.)
     // before calling nm.update() in the main loop.
 
-    NetworkManager nm;
+    IsoNet nm;
     Name name = Name::build()
         .set_identity_number(100)
         .set_manufacturer_code(999)

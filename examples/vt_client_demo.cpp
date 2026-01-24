@@ -1,14 +1,15 @@
-#include <isobus/network/network_manager.hpp>
-#include <isobus/vt/client.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/isobus/vt/client.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::net;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::vt;
 
 int main() {
     echo::info("=== VT Client Demo ===");
 
-    NetworkManager nm;
+    IsoNet nm;
     Name name = Name::build()
         .set_identity_number(1)
         .set_manufacturer_code(42)

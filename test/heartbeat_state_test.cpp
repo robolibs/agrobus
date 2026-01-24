@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/protocol/heartbeat.hpp>
+#include <agrobus/j1939/heartbeat.hpp>
 
-using namespace isobus;
+using namespace agrobus::j1939;
 
 // ─── HeartbeatSender tests ───────────────────────────────────────────────────
 

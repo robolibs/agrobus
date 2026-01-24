@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/core/pgn.hpp>
+#include <agrobus/net/pgn.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("PGN lookup") {
     SUBCASE("known PGN") {

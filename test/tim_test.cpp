@@ -1,10 +1,18 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
+#include <agrobus.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 TEST_CASE("TimServer - PTO control") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TimServer server(nm, cf);
@@ -38,7 +46,7 @@ TEST_CASE("TimServer - PTO control") {
 }
 
 TEST_CASE("TimServer - Hitch control") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TimServer server(nm, cf);
@@ -59,7 +67,7 @@ TEST_CASE("TimServer - Hitch control") {
 }
 
 TEST_CASE("TimServer - Aux valve control") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TimServer server(nm, cf);
@@ -92,7 +100,7 @@ TEST_CASE("TimServer - Aux valve control") {
 }
 
 TEST_CASE("TimClient - initialization") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TimClient client(nm, cf);
@@ -103,7 +111,7 @@ TEST_CASE("TimClient - initialization") {
 }
 
 TEST_CASE("TimServer - update loop") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TimServer server(nm, cf);

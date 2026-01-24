@@ -1,93 +1,92 @@
-# wisobus
+# agrobus
 
 Modern C++20 ISO 11783 (ISOBUS) + J1939 + NMEA2000 networking stack with a fluent, application-first API.
 
-Before starting, i would like to thank immensely [AgIsoStack++](https://github.com/Open-Agriculture/AgIsoStack-plus-plus) for the inspiration and reference implementation) Without it, this literally would not have happened. A big part of this library is best described as "a nicer API on top of them" - because the hard protocol truths, edge cases, and real-world behavior are learned from them first. See [ACKNOWLEDGMENTS](./ACKNOWLEDGMENTS.md)
+Immense thanks to [AgIsoStack++](https://github.com/Open-Agriculture/AgIsoStack-plus-plus) for literally everything, mostly reference implementation and amazing documentation (way better than Agricultural Industry Electronics Foundation). Without that library, this would not have happened. A big part of this library is best described as a nicer API on top of AgIsoStack - the hard protocol truths, edge cases, and real-world behavior were learned from them first. See [ACKNOWLEDGMENTS](./ACKNOWLEDGMENTS.md). Please if you want to go to the original version, links are in acknowledgment :)
 
 ## Overview
 
-`wisobus` is a header-first CAN protocol stack focused on ISO 11783 (ISOBUS) and related ecosystems used on agricultural and marine equipment.
+`agrobus` is a header-first CAN protocol stack focused on ISO 11783 (ISOBUS) and related ecosystems used on agricultural and marine equipment.
 It provides a high level message/transport/network abstraction on top of a raw CAN endpoint, while keeping the API close to the underlying
 standards (PGNs, source/destination addressing, address-claiming, TP/ETP, etc.).
 
 The core idea is: application code should read like intent ("send this PGN", "subscribe to that PGN", "start address claiming") while the
 library handles the repetitive protocol machinery: frame encoding, multi-packet reassembly, session tracking, and common timing rules.
 
-The project is designed as a set of composable modules:
-- A CAN frame layer that encodes/decodes 29-bit extended identifiers
-- A network manager that routes frames, performs address claiming, and dispatches messages by PGN
-- Transport protocols (TP / ETP) for multi-packet transfers and an optional NMEA2000 fast-packet implementation
-- Protocol implementations for frequently used ISOBUS/J1939 services (diagnostics, file transfer, VT, TC, TIM, etc.)
+The project is organized into four sub-namespaces:
+- **`agrobus::net`** - CAN frame layer, network management (IsoNet), address claiming, transport protocols (TP/ETP/FastPacket), utilities
+- **`agrobus::j1939`** - J1939/SAE protocol services: diagnostics, heartbeat, acknowledgment, speed/distance, time/date, engine, transmission
+- **`agrobus::isobus`** - ISO 11783 application layer: Virtual Terminal, Task Controller, Sequence Control, implement messages, file server
+- **`agrobus::nmea`** - NMEA2000: definitions, interface parsing/generation, GNSS helpers
 
 ### Architecture Diagrams
 
 High level data flow (receive path):
 
 ```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                                 Application                               │
-│  - register_pgn_callback(PGN, fn)                                         │
-│  - protocol modules (VT/TC/TIM/FS/Diagnostics/...)                        │
-└───────────────────────────────┬───────────────────────────────────────────┘
-                                │ on_message / callbacks
-                                ▼
-┌───────────────────────────────────────────────────────────────────────────┐
-│                        isobus::network::NetworkManager                    │
-│  - endpoint polling / send_frame                                          │
-│  - address claiming + CF tracking                                         │
-│  - routes TP/ETP/FastPacket frames                                        │
-│  - dispatches Message{pgn,data,src,dst,prio,ts}                           │
-└───────────────┬───────────────────────┬───────────────────────┬───────────┘
-                │                       │                       │
-                ▼                       ▼                       ▼
-      ┌────────────────┐      ┌───────────────────┐     ┌───────────────────┐
-      │ AddressClaimer │      │ TransportProtocol │     │ FastPacketProtocol│
-      │ (ISO11783-5)   │      │ + ETP             │     │ (NMEA2000)        │
-      └───────┬────────┘      └───────┬───────────┘     └──────────┬────────┘
-              │                       │                            │
-              └───────────────┬───────┴───────────────┬────────────┘
-                              ▼                       ▼
-                   ┌──────────────────┐    ┌─────────────────────────┐
-                   │   Frame / ID     │    │ wirebit::CanEndpoint    │
-                   │ (29-bit CAN ID)  │    │ (driver abstraction)    │
-                   └──────────────────┘    └─────────────────────────┘
++-------------------------------------------------------------------------+
+|                                 Application                               |
+|  - register_pgn_callback(PGN, fn)                                         |
+|  - protocol modules (VT/TC/TIM/FS/Diagnostics/...)                        |
++-------------------------------+-------------------------------------------+
+                                | on_message / callbacks
+                                v
++-------------------------------------------------------------------------+
+|                          agrobus::net::IsoNet                              |
+|  - endpoint polling / send_frame                                          |
+|  - address claiming + CF tracking                                         |
+|  - routes TP/ETP/FastPacket frames                                        |
+|  - dispatches Message{pgn,data,src,dst,prio,ts}                           |
++---------------+-----------------------+-----------------------+-----------+
+                |                       |                       |
+                v                       v                       v
+      +----------------+      +-------------------+     +-------------------+
+      | AddressClaimer |      | TransportProtocol |     | FastPacketProtocol|
+      | (ISO11783-5)   |      | + ETP             |     | (NMEA2000)        |
+      +-------+--------+      +-------+-----------+     +----------+--------+
+              |                       |                            |
+              +-----------+-----------+-------------+--------------+
+                          v                         v
+               +------------------+    +-------------------------+
+               |   Frame / ID     |    | wirebit::CanEndpoint    |
+               | (29-bit CAN ID)  |    | (driver abstraction)    |
+               +------------------+    +-------------------------+
 ```
 
 Library surface (include layout):
 
 ```
-include/isobus.hpp
-└── include/isobus/
-    ├── core/        (types, PGN/NAME/ID, Frame, Message, errors)
-    ├── util/        (event, scheduler, timer, bitfield, state machine)
-    ├── network/     (NetworkManager, InternalCF/PartnerCF, address claiming)
-    ├── transport/   (TP, ETP, session model, NMEA2000 fast packet)
-    ├── protocol/    (common ISOBUS/J1939 protocols)
-    ├── implement/   (tractor/implement messages and helpers)
-    ├── vt/          (Virtual Terminal client/server + object pool helpers)
-    ├── tc/          (Task Controller client/server, DDOP/DDI, geo, peer control)
-    ├── sc/          (Sequence Control master/client)
-    ├── niu/         (Network Interconnect Unit pieces)
-    ├── nmea/        (NMEA2000 definitions + parser/generator + GNSS)
-    └── fs/          (file server connection/properties helpers)
+include/agrobus.hpp
++-- include/agrobus/
+    |-- net/           (types, Frame, Message, IsoNet, address claiming,
+    |                   transport TP/ETP/FastPacket, utilities, NIU)
+    |-- j1939/         (engine, transmission, diagnostics, heartbeat,
+    |                   acknowledgment, speed/distance, time/date, ...)
+    |-- isobus/        (top-level: TIM, functionalities, auxiliary, guidance, ...)
+    |   |-- vt/        (Virtual Terminal client/server + object pool)
+    |   |-- tc/        (Task Controller client/server, DDOP, geo, peer control)
+    |   |-- sc/        (Sequence Control master/client)
+    |   |-- implement/ (tractor/implement messages and helpers)
+    |   +-- fs/        (file server connection/properties)
+    +-- nmea/          (NMEA2000 definitions, interface, GNSS, serial)
 ```
 
 ## Installation
 
-Repository: https://github.com/robolibs/isobus
+Repository: https://github.com/robolibs/agrobus
 
 ### Quick Start (CMake FetchContent)
 
 ```cmake
 include(FetchContent)
 FetchContent_Declare(
-  wisobus
-  GIT_REPOSITORY https://github.com/robolibs/isobus
+  agrobus
+  GIT_REPOSITORY https://github.com/robolibs/agrobus
   GIT_TAG main
 )
-FetchContent_MakeAvailable(wisobus)
+FetchContent_MakeAvailable(agrobus)
 
-target_link_libraries(your_target PRIVATE wisobus::wisobus)
+target_link_libraries(your_target PRIVATE agrobus::agrobus)
 ```
 
 Notes:
@@ -125,25 +124,26 @@ direnv allow
 
 ## Usage
 
-The central entrypoint is `isobus::network::NetworkManager`. You attach one or more CAN endpoints (ports), create one or more internal control
-functions, start address claiming, then send/receive PGNs.
+The central entrypoint is `agrobus::net::IsoNet`. You create an instance, attach a wirebit CAN endpoint (either default vcan0 or a custom one),
+create one or more internal control functions, start address claiming, then send/receive PGNs.
 
 ### Basic Usage
 
 ```cpp
-#include <isobus.hpp>
+#include <agrobus.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 int main() {
-    network::NetworkManager net(
-        network::NetworkConfig{}
-            .ports(1)
-            .bus_load(true)
-            .fast_packet(false));
+    IsoNet net;
 
-    // Provide a wirebit::CanEndpoint for port 0.
-    // net.set_endpoint(0, &endpoint);
+    // Option 1: default vcan0 endpoint
+    net.set_default_endpoint();
+
+    // Option 2: custom wirebit endpoint
+    // auto link = std::make_shared<wirebit::SocketCanLink>(...);
+    // wirebit::CanEndpoint ep(link, wirebit::CanConfig{.bitrate = 250000}, 0);
+    // net.set_endpoint(0, &ep);
 
     // Create an internal control function (ECU) and claim an address.
     auto icf = net.create_internal(Name{}, 0).value();
@@ -185,9 +185,6 @@ And you can access the protocol engines directly for custom integrations:
 auto &tp = net.transport_protocol();
 auto &etp = net.extended_transport_protocol();
 auto &fp = net.fast_packet_protocol();
-(void)tp;
-(void)etp;
-(void)fp;
 ```
 
 ## Features
@@ -195,10 +192,12 @@ auto &fp = net.fast_packet_protocol();
 - **Network manager** - Port-based CAN endpoint integration, address claiming, CF tracking, and PGN-based dispatch.
 - **Transport (TP/ETP)** - Automatic segmentation/reassembly for multi-packet ISO 11783 / J1939 messages.
 - **NMEA2000 fast packet** - Optional fast-packet support for registered PGNs.
-- **Protocol modules** - Building blocks for common services: diagnostics, file transfer, group function, request handling, heartbeat, time/date.
+- **J1939 protocol modules** - Diagnostics (DM1-DM13), heartbeat, acknowledgment, PGN request, speed/distance, time/date, engine/transmission.
 - **Virtual Terminal (VT)** - Client/server support with object pool utilities.
 - **Task Controller (TC)** - Client/server, DDOP helpers, DDI database, geo helpers, and peer control.
 - **Sequence Control (SC)** - Master/client components and types.
+- **Implement messages** - Tractor/implement speed, lighting, guidance, aux valve, machine speed commands, facilities.
+- **NMEA2000** - Definitions, interface parsing/generation, serial GNSS helpers.
 - **Integration tests + examples** - Large set of real usage examples under `examples/` and protocol tests under `test/`.
 
 ## Building and Testing
@@ -215,11 +214,11 @@ make test
 
 Notes:
 - `make build` runs `clang-format` over `./include` and `./src` before compiling.
-- CMake options are driven by `PROJECT` and exposed as `WISOBUS_BUILD_EXAMPLES`, `WISOBUS_ENABLE_TESTS`, and `WISOBUS_BIG_TRANSFER`.
+- CMake options are driven by `PROJECT` and exposed as `AGROBUS_BUILD_EXAMPLES`, `AGROBUS_ENABLE_TESTS`, and `AGROBUS_BIG_TRANSFER`.
 
 ## Dependency Graph
 
-`wisobus` is split into internal modules, but also composes a small set of external libraries.
+`agrobus` composes a small set of external libraries.
 The `PROJECT` file is the source of truth for versions.
 
 External dependencies (library):
@@ -227,7 +226,7 @@ External dependencies (library):
 - `datapod` - containers and utilities (`dp::Vector`, `dp::Map`, `dp::Array`, `dp::Optional`)
 - `optinum` - optional helpers and small utilities (varies by module)
 - `wirebit` - CAN driver abstraction (`wirebit::CanEndpoint`) and CAN primitives
-- `concord` - small support library used by some components
+- `concord` - coordinate transforms and geo utilities
 
 Test dependency:
 - `doctest` - unit tests in `test/`
@@ -235,17 +234,15 @@ Test dependency:
 Internal dependency map (conceptual):
 
 ```
-core
-  ├── util
-  ├── network
-  │     ├── transport
-  │     └── protocol
-  ├── vt
-  ├── tc
-  ├── sc
-  ├── niu
-  ├── nmea
-  └── fs
+net (core types, network, transport, utilities)
+  |-- j1939 (diagnostics, engine, heartbeat, ...)
+  |-- isobus
+  |     |-- vt (Virtual Terminal)
+  |     |-- tc (Task Controller)
+  |     |-- sc (Sequence Control)
+  |     |-- implement (tractor/implement messages)
+  |     +-- fs (file server)
+  +-- nmea (NMEA2000)
 ```
 
 ## Core Concepts
@@ -254,9 +251,9 @@ This section gives names to the key building blocks, so the rest of the codebase
 
 ### CAN Frame vs Message
 
-- `isobus::Frame` is a single CAN frame: a 29-bit identifier and up to 8 data bytes.
-- `isobus::Message` is an arbitrary length payload tagged with routing metadata (PGN, src, dst, priority).
-- The NetworkManager turns incoming frames into messages either directly (single frame) or after reassembly (TP/ETP/FastPacket).
+- `Frame` is a single CAN frame: a 29-bit identifier and up to 8 data bytes.
+- `Message` is an arbitrary length payload tagged with routing metadata (PGN, src, dst, priority).
+- `IsoNet` turns incoming frames into messages either directly (single frame) or after reassembly (TP/ETP/FastPacket).
 
 ### PGN / Priority / Addressing
 
@@ -266,7 +263,7 @@ This section gives names to the key building blocks, so the rest of the codebase
 
 ### Control Functions (CF)
 
-`wisobus` models the bus participants as Control Functions:
+`agrobus` models the bus participants as Control Functions:
 - `InternalCF` represents an ECU owned by your application.
 - `PartnerCF` represents a remote ECU that you care about and optionally filter by NAME.
 
@@ -300,7 +297,7 @@ J1939 / ISO 11783 defines multi-packet transport on top of CAN:
 - TP (up to 1785 bytes)
 - ETP (extended, for larger payloads; connection-mode only)
 
-`NetworkManager::send()` automatically picks:
+`IsoNet::send()` automatically picks:
 - single frame for <= 8 bytes
 - TP for 9..1785
 - ETP for > 1785 when destination-specific
@@ -310,20 +307,19 @@ The receive side reassembles the payload and emits a single `Message`.
 ### NMEA2000 Fast Packet
 
 NMEA2000 uses a different segmentation scheme called fast packet.
-`wisobus` includes a fast packet engine that can be enabled and tied to a set of PGNs you register.
+`agrobus` includes a fast packet engine that can be enabled and tied to a set of PGNs you register.
 
 ### Events and Callbacks
 
 There are two complementary ways to consume messages:
-- `NetworkManager::on_message` - stream of all decoded messages
-- `NetworkManager::register_pgn_callback(pgn, fn)` - PGN specific callbacks
+- `IsoNet::on_message` - stream of all decoded messages
+- `IsoNet::register_pgn_callback(pgn, fn)` - PGN specific callbacks
 
-Both are synchronous callbacks fired in `NetworkManager::update()`.
+Both are synchronous callbacks fired in `IsoNet::update()`.
 
 ## Protocol Coverage
 
 This codebase intentionally spans multiple parts of ISO 11783 plus a subset of J1939 and NMEA2000.
-The library is not claiming full compliance in every part yet; see `PLAN.md` for gaps and ordering.
 
 ### Implemented Areas (Highlights)
 
@@ -332,48 +328,20 @@ The library is not claiming full compliance in every part yet; see `PLAN.md` for
 - **Transport**: TP + ETP session handling, plus optional NMEA2000 fast packet
 - **Virtual Terminal (VT)**: object pool modeling, client/server utilities, state tracking
 - **Task Controller (TC)**: client/server, DDOP helpers, DDI database, geo helpers, peer control
-- **Diagnostics**: DM1/DTC handling and other diagnostic protocol helpers
+- **Diagnostics**: DM1/DM2/DM5/DM13 handling, DTC management, suspend/resume
 - **File Server**: file transfer protocol helpers and FS connection/properties types
 - **Sequence Control (SC)**: master/client types and state machine scaffolding
 - **NMEA2000**: definitions, interface parsing/generation, GNSS helpers
-
-### Relationship Between Standards
-
-This diagram shows how the standards are layered from a software perspective.
-
-```
-         ┌────────────────────────────────────────────┐
-         │                Application                 │
-         └─────────────────────┬──────────────────────┘
-                               │
-                               ▼
-┌───────────────────────────────────────────────────────────────┐
-│                 ISO 11783 Application Profiles                │
-│     VT (Part 6)   TC (Part 10)   TIM (Part 12)   SC (Part 14) │
-└──────────────────────────────┬────────────────────────────────┘
-                               │
-                               ▼
-┌───────────────────────────────────────────────────────────────┐
-│          ISO 11783 Network/Transport + J1939 Services         │
-│      Address Claiming, TP/ETP, Diagnostics, Request, etc.     │
-└──────────────────────────────┬────────────────────────────────┘
-                               │
-                               ▼
-┌───────────────────────────────────────────────────────────────┐
-│                         CAN 2.0B                              │
-│                29-bit identifier + 8 byte payload             │
-└───────────────────────────────────────────────────────────────┘
-```
 
 ## Module Tour
 
 If you are reading the code, these are the most useful entrypoints.
 
-### `include/isobus.hpp`
+### `include/agrobus.hpp`
 
 The umbrella include that exposes the full stack in one header.
 
-### `include/isobus/core/*`
+### `include/agrobus/net/`
 
 - `types.hpp` - fixed width integer aliases and common scalar types
 - `pgn.hpp` and `pgn_defs.hpp` - PGN types and common definitions
@@ -382,56 +350,42 @@ The umbrella include that exposes the full stack in one header.
 - `frame.hpp` - CAN frame wrapper
 - `message.hpp` - decoded message container for arbitrary-length payloads
 - `error.hpp` - error codes and `Result<T>` wrapper
-
-### `include/isobus/network/*`
-
-- `network_manager.hpp` - the central orchestrator, owns transport engines, claimers, callbacks
+- `network_manager.hpp` - IsoNet: the central orchestrator, owns transport engines, claimers, callbacks
 - `address_claimer.hpp` - address claiming state machine and timing
 - `control_function.hpp` - common CF types and state
 - `internal_cf.hpp` - internal ECU representation
 - `partner_cf.hpp` - partner discovery by NAME filtering
-- `working_set.hpp` - helpers for ISOBUS working set modeling
+- `working_set.hpp` - ISOBUS working set modeling with 100ms member message timing
+- `tp.hpp` / `etp.hpp` - transport protocol connection management
+- `fast_packet.hpp` - NMEA2000 fast packet segmentation/reassembly
 - `eth_can.hpp` - Ethernet-CAN bridge integration point
 
-### `include/isobus/transport/*`
+### `include/agrobus/j1939/`
 
-- `tp.hpp` - TP connection management (RTS/CTS, BAM, DT)
-- `etp.hpp` - extended transport protocol
-- `session.hpp` - shared session state model
-- `fast_packet.hpp` - NMEA2000 fast packet segmentation/reassembly
-
-### `include/isobus/protocol/*`
-
-This folder contains protocol helpers and message types. Examples include:
+- `engine.hpp` / `transmission.hpp` - engine and transmission parameter messages
+- `diagnostic.hpp` / `dm_memory.hpp` - DM1/DM2/DM5/DM13, DTC management, suspend/resume
+- `heartbeat.hpp` - periodic heartbeat with timeout detection
 - `acknowledgment.hpp` - ACK/NACK handling
-- `diagnostic.hpp` and `dm_memory.hpp` - diagnostic protocol helpers
-- `file_transfer.hpp` - file server protocol messages
-- `group_function.hpp` - group function protocol
-- `heartbeat.hpp` - periodic heartbeat
-- `request2.hpp` and `pgn_request.hpp` - request handling
-- `language.hpp` and `time_date.hpp` - localization and time/date messages
+- `pgn_request.hpp` / `request2.hpp` - PGN request protocol
+- `speed_distance.hpp` - wheel/ground speed and distance
+- `time_date.hpp` / `language.hpp` - time/date and localization messages
 
-### `include/isobus/vt/*`
+### `include/agrobus/isobus/`
 
-Virtual Terminal support:
-- object definitions and pool management
-- client/server roles
-- update helpers and state trackers
+- `vt/` - Virtual Terminal: object definitions, pool management, client/server, state tracking
+- `tc/` - Task Controller: client/server, DDOP modeling, DDI database, geo helpers, peer control
+- `sc/` - Sequence Control: master/client components and types
+- `implement/` - Tractor/implement messages: lighting, guidance, speed/distance, facilities, aux valves
+- `fs/` - File server: connection and properties helpers
+- `tim.hpp` / `functionalities.hpp` / `auxiliary.hpp` / `guidance.hpp` - top-level protocol helpers
 
-### `include/isobus/tc/*`
+### `include/agrobus/nmea/`
 
-Task Controller support:
-- client/server roles
-- DDOP modeling and helpers
-- DDI database
-- geo helpers and peer control
-
-### `include/isobus/nmea/*`
-
-NMEA2000 support:
-- definitions and PGN lists
-- parser/generator utilities
-- serial GNSS helpers
+- `definitions.hpp` - NMEA2000 PGN definitions
+- `interface.hpp` - parser/generator utilities
+- `n2k_management.hpp` - N2K network management
+- `position.hpp` - GNSS position types
+- `serial_gnss.hpp` - serial GNSS helpers
 
 ## Safety and Correctness
 
@@ -441,7 +395,9 @@ The library contains a mix of defensive decoding and explicit state tracking.
 Key behaviors:
 - Default values for missing fields in message decoders (0xFF/0xFFFF patterns where appropriate)
 - Strict size bounds for TP/ETP payloads
-- Address violation detection in `NetworkManager` (re-assert address claim when another device uses our SA)
+- Address violation detection in IsoNet (re-assert address claim when another device uses our SA)
+- RTxD delay on address re-claim after contention loss
+- DM13 suspend duration tracking with auto-resume
 
 ## Performance Notes
 
@@ -451,7 +407,7 @@ Some choices you will see:
 - vector-based payloads only after multi-packet reassembly
 - minimal allocations on the single-frame path
 
-SIMD flags can be enabled/disabled via `WISOBUS_ENABLE_SIMD` when building with CMake.
+SIMD flags can be enabled/disabled via `AGROBUS_ENABLE_SIMD` when building with CMake.
 
 ## Testing
 
@@ -462,6 +418,9 @@ They cover:
 - VT pool validation and end-to-end flows
 - TC DDOP correctness and end-to-end flows
 - NMEA2000 parsing and batch utilities
+- diagnostics DM1/DM13 suspend/resume
+- heartbeat timeout detection
+- address claim contention and RTxD delay
 
 To run everything:
 
@@ -473,13 +432,11 @@ make test
 ## Project Layout
 
 Top-level highlights:
-- `include/` - public headers
-- `src/` - optional compiled sources (this repo is mostly header-first)
+- `include/` - public headers (`agrobus.hpp` umbrella + `agrobus/` tree)
 - `examples/` - example executables (picked up automatically by CMake)
 - `test/` - doctest test executables (picked up automatically by CMake)
-- `xtra/` - reference and experimental code, including a vendored AgIsoStack++
 - `PROJECT` - name/version/dependency manifest consumed by CMake
-- `PLAN.md` - long-form implementation roadmap
+- `Makefile` - build system wrapper
 
 ## Contributing
 
@@ -506,40 +463,13 @@ If you are behind a proxy or have restricted outbound access:
 
 Check these common integration issues:
 - your `wirebit::CanEndpoint` returns frames in extended format (29-bit IDs)
-- you are calling `NetworkManager::update()` frequently enough
+- you are calling `IsoNet::update()` frequently enough
 - your internal CF has successfully claimed an address (not NULL)
 
 ### TP/ETP sessions time out
 
 Multi-packet transfers require periodic updates to progress timers.
 Ensure `update(elapsed_ms)` is called with realistic timing, and that your endpoint send/recv is non-blocking.
-
-## Notes
-
-- This README is intentionally long to serve as an orientation map for a large codebase.
-- For detailed protocol implementation tasks and missing pieces, follow `PLAN.md`.
-
-## Examples
-
-Examples are built when examples are enabled in your build system configuration.
-The `examples/` directory contains both small demos and more involved scenarios.
-
-Selected entrypoints (non-exhaustive):
-- `examples/network_basic.cpp` - minimal network manager usage
-- `examples/socketcan_demo.cpp` - SocketCAN style integration
-- `examples/virtual_can_demo.cpp` - virtual CAN bus demo
-- `examples/transport_demo.cpp` and `examples/complex/transport_protocol.cpp` - TP/ETP usage
-- `examples/vt_client_demo.cpp` / `examples/vt_server_demo.cpp` - VT client/server demos
-- `examples/tc_client_demo.cpp` / `examples/tc_server_demo.cpp` - Task Controller demos
-- `examples/tim_demo.cpp` - TIM demo
-- `examples/serial_gnss.cpp` and NMEA2K examples under `examples/complex/`
-
-## Design Notes
-
-- **Message model** - `isobus::Message` represents an arbitrary-length payload after reassembly, tagged with PGN/source/destination.
-- **Events** - `isobus::Event<T...>` is used for callbacks like `NetworkManager::on_message`.
-- **Port abstraction** - one `NetworkManager` instance can manage multiple CAN ports, each bound to a `wirebit::CanEndpoint`.
-- **Reference implementation** - a vendored copy of AgIsoStack++ is kept under `xtra/` for protocol behavior reference.
 
 ## Versioning
 

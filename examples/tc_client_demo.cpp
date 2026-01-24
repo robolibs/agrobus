@@ -1,15 +1,16 @@
-#include <isobus/network/network_manager.hpp>
-#include <isobus/tc/client.hpp>
-#include <isobus/tc/ddop.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/isobus/tc/client.hpp>
+#include <agrobus/isobus/tc/ddop.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::tc;
+using namespace agrobus::net;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::tc;
 
 int main() {
     echo::info("=== Task Controller Client Demo ===");
 
-    NetworkManager nm;
+    IsoNet nm;
     Name name = Name::build()
         .set_identity_number(1)
         .set_manufacturer_code(42)

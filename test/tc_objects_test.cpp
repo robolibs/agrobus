@@ -1,9 +1,9 @@
 #include <doctest/doctest.h>
-#include <isobus/tc/objects.hpp>
+#include <agrobus/isobus/tc/objects.hpp>
 #include <cstring>
 
-using namespace isobus;
-using namespace isobus::tc;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::tc;
 
 TEST_CASE("DeviceObject serialization") {
     DeviceObject dev;

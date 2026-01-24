@@ -5,12 +5,12 @@
 // send PGN requests (broadcast and destination-specific), and send
 // positive/negative acknowledgments.
 
-#include <isobus/network/network_manager.hpp>
-#include <isobus/protocol/pgn_request.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/j1939/pgn_request.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::protocol;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
 
 // Custom PGN for application-specific data (proprietary B range)
 static constexpr PGN PGN_CUSTOM_STATUS = 0xFF20;
@@ -74,7 +74,7 @@ int main() {
     echo::info("=== PGN Request Handler Demo ===");
 
     // ─── Step 1: Set up the network manager ─────────────────────────────────────
-    NetworkManager nm(NetworkConfig{}.ports(1).bus_load(true));
+    IsoNet nm(NetworkConfig{}.ports(1).bus_load(true));
 
     // Build our ECU NAME (ISO 11783 64-bit device identity)
     Name ecu_name = Name::build()

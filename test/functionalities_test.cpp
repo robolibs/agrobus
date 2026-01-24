@@ -1,10 +1,18 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
+#include <agrobus.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 TEST_CASE("ControlFunctionFunctionalities - basic functionality management") {
-    NetworkManager nm;
+    IsoNet nm;
     auto cf_result = nm.create_internal(Name::build().set_identity_number(1).set_manufacturer_code(100), 0, 0x28);
     auto* cf = cf_result.value();
 
@@ -38,7 +46,7 @@ TEST_CASE("ControlFunctionFunctionalities - basic functionality management") {
 }
 
 TEST_CASE("ControlFunctionFunctionalities - Minimum CF options") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x28).value();
     ControlFunctionFunctionalities func(nm, cf);
 
@@ -57,7 +65,7 @@ TEST_CASE("ControlFunctionFunctionalities - Minimum CF options") {
 }
 
 TEST_CASE("ControlFunctionFunctionalities - AUX-O options") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x28).value();
     ControlFunctionFunctionalities func(nm, cf);
 
@@ -73,7 +81,7 @@ TEST_CASE("ControlFunctionFunctionalities - AUX-O options") {
 }
 
 TEST_CASE("ControlFunctionFunctionalities - AUX-N options") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x28).value();
     ControlFunctionFunctionalities func(nm, cf);
 
@@ -85,7 +93,7 @@ TEST_CASE("ControlFunctionFunctionalities - AUX-N options") {
 }
 
 TEST_CASE("ControlFunctionFunctionalities - TC GEO options") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x28).value();
     ControlFunctionFunctionalities func(nm, cf);
 
@@ -99,7 +107,7 @@ TEST_CASE("ControlFunctionFunctionalities - TC GEO options") {
 }
 
 TEST_CASE("ControlFunctionFunctionalities - TC Section Control options") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x28).value();
     ControlFunctionFunctionalities func(nm, cf);
 
@@ -113,7 +121,7 @@ TEST_CASE("ControlFunctionFunctionalities - TC Section Control options") {
 }
 
 TEST_CASE("ControlFunctionFunctionalities - Basic Tractor ECU options") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x28).value();
     ControlFunctionFunctionalities func(nm, cf);
 
@@ -125,7 +133,7 @@ TEST_CASE("ControlFunctionFunctionalities - Basic Tractor ECU options") {
 }
 
 TEST_CASE("ControlFunctionFunctionalities - TIM options") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x28).value();
     ControlFunctionFunctionalities func(nm, cf);
 
@@ -142,7 +150,7 @@ TEST_CASE("ControlFunctionFunctionalities - TIM options") {
 }
 
 TEST_CASE("ControlFunctionFunctionalities - TIM aux valve options") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x28).value();
     ControlFunctionFunctionalities func(nm, cf);
 
@@ -162,7 +170,7 @@ TEST_CASE("ControlFunctionFunctionalities - TIM aux valve options") {
 }
 
 TEST_CASE("ControlFunctionFunctionalities - serialization") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x28).value();
     ControlFunctionFunctionalities func(nm, cf);
 

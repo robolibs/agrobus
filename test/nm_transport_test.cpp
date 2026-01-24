@@ -1,18 +1,26 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <cstring>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
-// Helper: create a NetworkManager with vcan and a claimed InternalCF
+// Helper: create a IsoNet with vcan and a claimed InternalCF
 struct TestSetup {
     std::shared_ptr<wirebit::SocketCanLink> dut_link;
     wirebit::CanEndpoint dut_ep;
     std::shared_ptr<wirebit::SocketCanLink> harness_link;
     wirebit::CanEndpoint harness_ep;
-    NetworkManager nm;
+    IsoNet nm;
     InternalCF *cf = nullptr;
 
     TestSetup()
@@ -51,7 +59,7 @@ struct TestSetup {
     }
 };
 
-TEST_CASE("NetworkManager - send auto-selects transport based on size") {
+TEST_CASE("IsoNet - send auto-selects transport based on size") {
     TestSetup setup;
 
     SUBCASE("single frame for <= 8 bytes") {
@@ -111,7 +119,7 @@ TEST_CASE("NetworkManager - send auto-selects transport based on size") {
     }
 }
 
-TEST_CASE("NetworkManager - TP BAM receive via process_frame") {
+TEST_CASE("IsoNet - TP BAM receive via process_frame") {
     TestSetup setup;
 
     // Simulate receiving a BAM + data frames from external node
@@ -180,7 +188,7 @@ TEST_CASE("NetworkManager - TP BAM receive via process_frame") {
     }
 }
 
-TEST_CASE("NetworkManager - TP connection mode RTS/CTS receive") {
+TEST_CASE("IsoNet - TP connection mode RTS/CTS receive") {
     TestSetup setup;
 
     PGN test_pgn = PGN_ECU_TO_VT;
@@ -261,7 +269,7 @@ TEST_CASE("NetworkManager - TP connection mode RTS/CTS receive") {
     CHECK(eoma_sent);
 }
 
-TEST_CASE("NetworkManager - TP BAM send with update generates data") {
+TEST_CASE("IsoNet - TP BAM send with update generates data") {
     TestSetup setup;
 
     dp::Vector<u8> data(14, 0x42);
@@ -284,7 +292,7 @@ TEST_CASE("NetworkManager - TP BAM send with update generates data") {
     CHECK(dt_count > 0);
 }
 
-TEST_CASE("NetworkManager - transport frames not dispatched as regular messages") {
+TEST_CASE("IsoNet - transport frames not dispatched as regular messages") {
     TestSetup setup;
 
     bool tp_cm_dispatched = false;
@@ -313,7 +321,7 @@ TEST_CASE("NetworkManager - transport frames not dispatched as regular messages"
     CHECK_FALSE(tp_dt_dispatched);
 }
 
-TEST_CASE("NetworkManager - fast packet send and receive") {
+TEST_CASE("IsoNet - fast packet send and receive") {
     NetworkConfig cfg;
     cfg.enable_fast_packet = true;
 
@@ -324,7 +332,7 @@ TEST_CASE("NetworkManager - fast packet send and receive") {
     auto h_link = std::make_shared<wirebit::SocketCanLink>(wirebit::SocketCanLink::attach("vcan_nm_fp").value());
     wirebit::CanEndpoint harness(std::static_pointer_cast<wirebit::Link>(h_link), wirebit::CanConfig{.bitrate = 250000}, 2);
 
-    NetworkManager nm(cfg);
+    IsoNet nm(cfg);
     nm.set_endpoint(0, &ep);
     auto *cf = nm.create_internal(Name::build().set_identity_number(2).set_manufacturer_code(200), 0, 0x29).value();
 
@@ -381,7 +389,7 @@ TEST_CASE("NetworkManager - fast packet send and receive") {
     }
 }
 
-TEST_CASE("NetworkManager - non-fast-packet PGN uses TP for multi-frame") {
+TEST_CASE("IsoNet - non-fast-packet PGN uses TP for multi-frame") {
     NetworkConfig cfg;
     cfg.enable_fast_packet = true;
 
@@ -392,7 +400,7 @@ TEST_CASE("NetworkManager - non-fast-packet PGN uses TP for multi-frame") {
     auto h_link = std::make_shared<wirebit::SocketCanLink>(wirebit::SocketCanLink::attach("vcan_nm_nfp").value());
     wirebit::CanEndpoint harness(std::static_pointer_cast<wirebit::Link>(h_link), wirebit::CanConfig{.bitrate = 250000}, 2);
 
-    NetworkManager nm(cfg);
+    IsoNet nm(cfg);
     nm.set_endpoint(0, &ep);
     auto *cf = nm.create_internal(Name::build().set_identity_number(3).set_manufacturer_code(300), 0, 0x2A).value();
 
@@ -417,8 +425,8 @@ TEST_CASE("NetworkManager - non-fast-packet PGN uses TP for multi-frame") {
     CHECK(frames[0].data[0] == tp_cm::BAM);
 }
 
-TEST_CASE("NetworkManager - transport protocol accessor") {
-    NetworkManager nm;
+TEST_CASE("IsoNet - transport protocol accessor") {
+    IsoNet nm;
     // Verify transport instances are accessible
     TransportProtocol &tp = nm.transport_protocol();
     ExtendedTransportProtocol &etp = nm.extended_transport_protocol();

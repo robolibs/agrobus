@@ -1,11 +1,11 @@
 #include <doctest/doctest.h>
-#include <isobus/tc/client.hpp>
+#include <agrobus/isobus/tc/client.hpp>
 
-using namespace isobus;
-using namespace isobus::tc;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::tc;
 
 TEST_CASE("TaskControllerClient state machine") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     name.set_function_code(100);
     auto cf_result = nm.create_internal(name, 0, 0x28);
@@ -61,7 +61,7 @@ TEST_CASE("TaskControllerClient state machine") {
 }
 
 TEST_CASE("TaskControllerClient callbacks") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();

@@ -1,12 +1,17 @@
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <echo/echo.hpp>
 #include <cmath>
 
-using namespace isobus;
-using namespace isobus::tc;
-using namespace isobus::vt;
-using namespace isobus::nmea;
-namespace ddi = isobus::tc::ddi;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
+namespace ddi = agrobus::isobus::tc::ddi;
 
 
 struct SprayerState {
@@ -22,7 +27,7 @@ int main() {
     echo::info("=== Sprayer Controller (TC + VT + GNSS) ===");
 
     // ─── Network Setup ─────────────────────────────────────────────────────
-    NetworkManager nm;
+    IsoNet nm;
     Name name = Name::build()
         .set_identity_number(100)
         .set_manufacturer_code(42)

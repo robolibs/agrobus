@@ -1,13 +1,14 @@
-#include <isobus/network/network_manager.hpp>
-#include <isobus/protocol/speed_distance.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/j1939/speed_distance.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
 
 int main() {
     echo::info("=== Speed Monitor Demo ===");
 
-    NetworkManager nm;
+    IsoNet nm;
     Name name = Name::build()
         .set_identity_number(1)
         .set_manufacturer_code(42)

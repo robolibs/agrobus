@@ -1,12 +1,19 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
-#include <isobus/tc/server.hpp>
+#include <agrobus.hpp>
+#include <agrobus/isobus/tc/server.hpp>
 
-using namespace isobus;
-using namespace isobus::tc;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 TEST_CASE("TaskControllerServer - initialization and state") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TaskControllerServer server(nm, cf);
@@ -28,7 +35,7 @@ TEST_CASE("TaskControllerServer - initialization and state") {
 }
 
 TEST_CASE("TaskControllerServer - configuration") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TaskControllerServer server(nm, cf, TCServerConfig{}
@@ -42,7 +49,7 @@ TEST_CASE("TaskControllerServer - configuration") {
 }
 
 TEST_CASE("TaskControllerServer - callbacks") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TaskControllerServer server(nm, cf);
@@ -65,7 +72,7 @@ TEST_CASE("TaskControllerServer - callbacks") {
 }
 
 TEST_CASE("TaskControllerServer - update sends status") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TaskControllerServer server(nm, cf);

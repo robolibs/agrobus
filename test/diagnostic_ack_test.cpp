@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/protocol/diagnostic.hpp>
+#include <agrobus/j1939/diagnostic.hpp>
 
-using namespace isobus;
+using namespace agrobus::j1939;
 
 TEST_CASE("PreviouslyActiveDTC struct") {
     SUBCASE("default construction") {
@@ -23,7 +23,7 @@ TEST_CASE("PreviouslyActiveDTC struct") {
 }
 
 TEST_CASE("DiagnosticProtocol DM2 includes all previously active DTCs") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -101,7 +101,7 @@ TEST_CASE("DiagnosticProtocol DM2 includes all previously active DTCs") {
 }
 
 TEST_CASE("DiagnosticProtocol DM3 behavior") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -175,7 +175,7 @@ TEST_CASE("DiagnosticProtocol DM3 behavior") {
 }
 
 TEST_CASE("DiagnosticProtocol NACK for unsupported PGN") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -197,7 +197,7 @@ TEST_CASE("DiagnosticProtocol NACK for unsupported PGN") {
     }
 
     SUBCASE("nack_unsupported_pgn before initialize fails") {
-        NetworkManager nm2;
+        IsoNet nm2;
         auto cf2_result = nm2.create_internal(name, 0, 0x29);
         auto* cf2 = cf2_result.value();
 
@@ -210,7 +210,7 @@ TEST_CASE("DiagnosticProtocol NACK for unsupported PGN") {
 }
 
 TEST_CASE("DiagnosticProtocol ack_handler integration") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();

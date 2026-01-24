@@ -1,12 +1,19 @@
 #include <doctest/doctest.h>
-#include <isobus/tc/peer_control.hpp>
-#include <isobus.hpp>
+#include <agrobus/isobus/tc/peer_control.hpp>
+#include <agrobus.hpp>
 
-using namespace isobus;
-using namespace isobus::tc;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 TEST_CASE("PeerControlInterface - initialization") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     PeerControlInterface pc(nm, cf);
@@ -16,7 +23,7 @@ TEST_CASE("PeerControlInterface - initialization") {
 }
 
 TEST_CASE("PeerControlInterface - add assignment") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     PeerControlInterface pc(nm, cf);
@@ -37,7 +44,7 @@ TEST_CASE("PeerControlInterface - add assignment") {
 }
 
 TEST_CASE("PeerControlInterface - duplicate detection") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     PeerControlInterface pc(nm, cf);
@@ -61,7 +68,7 @@ TEST_CASE("PeerControlInterface - duplicate detection") {
 }
 
 TEST_CASE("PeerControlInterface - remove assignment") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     PeerControlInterface pc(nm, cf);
@@ -82,7 +89,7 @@ TEST_CASE("PeerControlInterface - remove assignment") {
 }
 
 TEST_CASE("PeerControlInterface - activate/deactivate") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     PeerControlInterface pc(nm, cf);
@@ -104,7 +111,7 @@ TEST_CASE("PeerControlInterface - activate/deactivate") {
 }
 
 TEST_CASE("PeerControlInterface - clear assignments") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     PeerControlInterface pc(nm, cf);
@@ -123,7 +130,7 @@ TEST_CASE("PeerControlInterface - clear assignments") {
 }
 
 TEST_CASE("PeerControlInterface - events") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     PeerControlInterface pc(nm, cf);

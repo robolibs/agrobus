@@ -1,8 +1,8 @@
 #include <doctest/doctest.h>
-#include <isobus/transport/etp.hpp>
-#include <isobus/core/constants.hpp>
+#include <agrobus/net/etp.hpp>
+#include <agrobus/net/constants.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("Extended Transport Protocol send") {
     ExtendedTransportProtocol etp;

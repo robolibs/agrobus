@@ -1,9 +1,8 @@
 #include <doctest/doctest.h>
-#include <isobus/nmea/position.hpp>
+#include <agrobus/nmea/position.hpp>
 #include <cmath>
 
-using namespace isobus;
-using namespace isobus::nmea;
+using namespace agrobus::nmea;
 
 TEST_CASE("WGS84 to ENU roundtrip") {
     GNSSPosition pos;

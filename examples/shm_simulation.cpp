@@ -1,4 +1,4 @@
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/shm/shm_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 #include <wirebit/model.hpp>
@@ -7,7 +7,15 @@
 #include <atomic>
 #include <thread>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 static std::atomic<bool> running{true};
 void signal_handler(int) { running = false; }
@@ -27,7 +35,7 @@ int main() {
     wirebit::CanEndpoint endpoint1(std::static_pointer_cast<wirebit::Link>(server_link),
                                    wirebit::CanConfig{.bitrate = 250000}, 1);
 
-    NetworkManager nm1;
+    IsoNet nm1;
     nm1.set_endpoint(0, &endpoint1);
 
     Name tractor_name = Name::build()
@@ -54,7 +62,7 @@ int main() {
     wirebit::CanEndpoint endpoint2(std::static_pointer_cast<wirebit::Link>(client_link),
                                    wirebit::CanConfig{.bitrate = 250000}, 2);
 
-    NetworkManager nm2;
+    IsoNet nm2;
     nm2.set_endpoint(0, &endpoint2);
 
     Name implement_name = Name::build()

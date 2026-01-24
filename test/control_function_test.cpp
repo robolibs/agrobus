@@ -1,9 +1,9 @@
 #include <doctest/doctest.h>
-#include <isobus/network/control_function.hpp>
-#include <isobus/network/partner_cf.hpp>
-#include <isobus/core/constants.hpp>
+#include <agrobus/net/control_function.hpp>
+#include <agrobus/net/partner_cf.hpp>
+#include <agrobus/net/constants.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("ControlFunction") {
     SUBCASE("default state") {

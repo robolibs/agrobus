@@ -1,10 +1,18 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 #include <wirebit/link.hpp>
 #include <cstring>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 // Mock wirebit Link for integration testing
 class IntegrationMockLink : public wirebit::Link {
@@ -63,11 +71,11 @@ public:
     void clear_tx() { tx_log_.clear(); }
 };
 
-TEST_CASE("Full stack: NetworkManager + wirebit + address claim") {
+TEST_CASE("Full stack: IsoNet + wirebit + address claim") {
     auto link = std::make_shared<IntegrationMockLink>();
     wirebit::CanEndpoint ep(link, wirebit::CanConfig{}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &ep);
 
     Name name;
@@ -86,11 +94,11 @@ TEST_CASE("Full stack: NetworkManager + wirebit + address claim") {
     CHECK(!link->transmitted().empty());
 }
 
-TEST_CASE("Full stack: NetworkManager + PGN callbacks") {
+TEST_CASE("Full stack: IsoNet + PGN callbacks") {
     auto link = std::make_shared<IntegrationMockLink>();
     wirebit::CanEndpoint ep(link, wirebit::CanConfig{}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &ep);
 
     Name name;
@@ -117,11 +125,11 @@ TEST_CASE("Full stack: NetworkManager + PGN callbacks") {
     CHECK(received_pgn == PGN_VEHICLE_SPEED);
 }
 
-TEST_CASE("Full stack: NetworkManager + DiagnosticProtocol") {
+TEST_CASE("Full stack: IsoNet + DiagnosticProtocol") {
     auto link = std::make_shared<IntegrationMockLink>();
     wirebit::CanEndpoint ep(link, wirebit::CanConfig{}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &ep);
 
     Name name;
@@ -140,11 +148,11 @@ TEST_CASE("Full stack: NetworkManager + DiagnosticProtocol") {
     diag.update(1500);
 }
 
-TEST_CASE("Full stack: NetworkManager + TC Client DDOP") {
+TEST_CASE("Full stack: IsoNet + TC Client DDOP") {
     auto link = std::make_shared<IntegrationMockLink>();
     wirebit::CanEndpoint ep(link, wirebit::CanConfig{}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &ep);
 
     Name name;
@@ -192,11 +200,11 @@ TEST_CASE("Full stack: NetworkManager + TC Client DDOP") {
     tc_client.set_ddop(std::move(ddop));
 }
 
-TEST_CASE("Full stack: NetworkManager + VT Client pool") {
+TEST_CASE("Full stack: IsoNet + VT Client pool") {
     auto link = std::make_shared<IntegrationMockLink>();
     wirebit::CanEndpoint ep(link, wirebit::CanConfig{}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &ep);
 
     Name name;
@@ -234,11 +242,11 @@ TEST_CASE("Full stack: NetworkManager + VT Client pool") {
     CHECK(vt_client.state() == vt::VTState::WaitForVTStatus);
 }
 
-TEST_CASE("Full stack: Transport + NetworkManager") {
+TEST_CASE("Full stack: Transport + IsoNet") {
     auto link = std::make_shared<IntegrationMockLink>();
     wirebit::CanEndpoint ep(link, wirebit::CanConfig{}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &ep);
 
     Name name;
@@ -263,10 +271,10 @@ TEST_CASE("Full stack: Transport + NetworkManager") {
 }
 
 TEST_CASE("Full stack: NMEA position + coordinate transforms") {
-    nmea::GNSSPosition pos;
+    GNSSPosition pos;
     pos.wgs = concord::earth::WGS(48.1234, 11.5678, 520.0);
     pos.satellites_used = 14;
-    pos.fix_type = nmea::GNSSFixType::RTKFixed;
+    pos.fix_type = GNSSFixType::RTKFixed;
 
     dp::Geo ref{48.1230, 11.5670, 515.0};
 
@@ -281,11 +289,11 @@ TEST_CASE("Full stack: NMEA position + coordinate transforms") {
     CHECK(ecf.x > 4.0e6);
 }
 
-TEST_CASE("Full stack: SpeedDistance + NetworkManager") {
+TEST_CASE("Full stack: SpeedDistance + IsoNet") {
     auto link = std::make_shared<IntegrationMockLink>();
     wirebit::CanEndpoint ep(link, wirebit::CanConfig{}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &ep);
 
     Name name;
@@ -315,7 +323,7 @@ TEST_CASE("Full stack: Multiple modules cooperating") {
     auto link = std::make_shared<IntegrationMockLink>();
     wirebit::CanEndpoint ep(link, wirebit::CanConfig{}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &ep);
 
     Name name;

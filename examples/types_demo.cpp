@@ -1,11 +1,11 @@
-#include <isobus/core/types.hpp>
-#include <isobus/core/name.hpp>
-#include <isobus/core/identifier.hpp>
-#include <isobus/core/frame.hpp>
-#include <isobus/core/constants.hpp>
+#include <agrobus/net/types.hpp>
+#include <agrobus/net/name.hpp>
+#include <agrobus/net/identifier.hpp>
+#include <agrobus/net/frame.hpp>
+#include <agrobus/net/constants.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 int main() {
     echo::info("=== ISOBUS Types Demo ===");

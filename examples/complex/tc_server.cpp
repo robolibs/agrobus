@@ -3,12 +3,13 @@
 // handling, peer control assignments, event subscriptions, polling connected clients,
 // and sending set_value commands to control sections.
 
-#include <isobus/network/network_manager.hpp>
-#include <isobus/tc/server.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/isobus/tc/server.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::tc;
+using namespace agrobus::net;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::tc;
 
 // DDI constants used for section control
 namespace ddi {
@@ -42,7 +43,7 @@ int main() {
     echo::info("=== Comprehensive TC Server Example ===");
 
     // ─── Network Setup ──────────────────────────────────────────────────────────
-    NetworkManager nm;
+    IsoNet nm;
 
     // Build the ISO NAME for our TC server
     // Function code 29 = Task Controller per ISO 11783

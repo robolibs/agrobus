@@ -1,8 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/safety/policy.hpp>
+#include <agrobus/net/policy.hpp>
 
-using namespace isobus;
-using namespace isobus::safety;
+using namespace agrobus::net;
 
 TEST_CASE("SafetyPolicy construction") {
     SUBCASE("default configuration") {

@@ -1,11 +1,18 @@
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
-#include <isobus/tc/peer_control.hpp>
+#include <agrobus/isobus/tc/peer_control.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::tc;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 int main() {
     echo::info("=== Peer Control Demo ===");
@@ -19,7 +26,7 @@ int main() {
     wirebit::CanEndpoint endpoint(std::static_pointer_cast<wirebit::Link>(link),
                                   wirebit::CanConfig{.bitrate = 250000}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &endpoint);
 
     auto* cf = nm.create_internal(

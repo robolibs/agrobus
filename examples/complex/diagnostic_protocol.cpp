@@ -7,22 +7,23 @@
 // - Event-driven callback system
 // - Auto-send with periodic update loop
 
-#include <isobus/network/network_manager.hpp>
-#include <isobus/protocol/diagnostic.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/j1939/diagnostic.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
 
 int main() {
     echo::info("=== Comprehensive Diagnostic Protocol Demo ===");
     echo::info("");
 
     // -------------------------------------------------------------------------
-    // Step 1: Set up NetworkManager, Name, and InternalCF
+    // Step 1: Set up IsoNet, Name, and InternalCF
     // -------------------------------------------------------------------------
     echo::info("[Setup] Creating network manager and control function...");
 
-    NetworkManager nm;
+    IsoNet nm;
 
     Name name = Name::build()
         .set_identity_number(100)

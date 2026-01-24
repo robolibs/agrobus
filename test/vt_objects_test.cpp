@@ -1,8 +1,8 @@
 #include <doctest/doctest.h>
-#include <isobus/vt/objects.hpp>
+#include <agrobus/isobus/vt/objects.hpp>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::vt;
 
 TEST_CASE("VTObject") {
     SUBCASE("serialize with body") {

@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/core/message.hpp>
+#include <agrobus/net/message.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("Message data extraction") {
     Message msg;

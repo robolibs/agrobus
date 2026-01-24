@@ -1,11 +1,11 @@
 #include <doctest/doctest.h>
-#include <isobus/network/network_manager.hpp>
+#include <agrobus/net/network_manager.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
-TEST_CASE("NetworkManager creation") {
+TEST_CASE("IsoNet creation") {
     SUBCASE("default config") {
-        NetworkManager nm;
+        IsoNet nm;
         CHECK(nm.internal_cfs().empty());
         CHECK(nm.partner_cfs().empty());
     }
@@ -14,13 +14,13 @@ TEST_CASE("NetworkManager creation") {
         NetworkConfig cfg;
         cfg.num_ports = 2;
         cfg.enable_bus_load = false;
-        NetworkManager nm(cfg);
+        IsoNet nm(cfg);
         CHECK(nm.bus_load(0) == 0.0f);
     }
 }
 
 TEST_CASE("Internal CF creation") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     name.set_identity_number(42);
 
@@ -32,7 +32,7 @@ TEST_CASE("Internal CF creation") {
 }
 
 TEST_CASE("Partner CF creation") {
-    NetworkManager nm;
+    IsoNet nm;
     dp::Vector<NameFilter> filters = {
         {NameFilterField::FunctionCode, 100},
         {NameFilterField::IndustryGroup, 2}
@@ -44,7 +44,7 @@ TEST_CASE("Partner CF creation") {
 }
 
 TEST_CASE("PGN callback registration") {
-    NetworkManager nm;
+    IsoNet nm;
     bool called = false;
     nm.register_pgn_callback(PGN_VEHICLE_SPEED, [&](const Message&) {
         called = true;
@@ -54,7 +54,7 @@ TEST_CASE("PGN callback registration") {
 }
 
 TEST_CASE("Send without driver fails") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -67,7 +67,7 @@ TEST_CASE("Send without driver fails") {
 }
 
 TEST_CASE("Control functions list") {
-    NetworkManager nm;
+    IsoNet nm;
     Name n1, n2;
     nm.create_internal(n1, 0, 0x10);
     dp::Vector<NameFilter> filters = {{NameFilterField::FunctionCode, 1}};

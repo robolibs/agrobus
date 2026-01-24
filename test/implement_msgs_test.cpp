@@ -1,11 +1,11 @@
 #include <doctest/doctest.h>
-#include <isobus/implement/lighting.hpp>
-#include <isobus/implement/tractor_facilities.hpp>
-#include <isobus/implement/machine_speed_cmd.hpp>
-#include <isobus/implement/aux_valve_status.hpp>
+#include <agrobus/isobus/implement/lighting.hpp>
+#include <agrobus/isobus/implement/tractor_facilities.hpp>
+#include <agrobus/isobus/implement/machine_speed_cmd.hpp>
+#include <agrobus/isobus/implement/aux_valve_status.hpp>
 
-using namespace isobus;
-using namespace isobus::implement;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::implement;
 
 // ─── Lighting encode/decode ────────────────────────────────────────────────────
 

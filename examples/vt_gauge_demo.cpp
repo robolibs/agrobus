@@ -1,15 +1,16 @@
-#include <isobus/vt/client.hpp>
-#include <isobus/vt/objects.hpp>
-#include <isobus/network/network_manager.hpp>
+#include <agrobus/isobus/vt/client.hpp>
+#include <agrobus/isobus/vt/objects.hpp>
+#include <agrobus/net/network_manager.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::net;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::vt;
 
 int main() {
     echo::info("=== VT Gauge Demo ===");
 
-    NetworkManager nm;
+    IsoNet nm;
     Name name = Name::build()
         .set_identity_number(5)
         .set_manufacturer_code(42)

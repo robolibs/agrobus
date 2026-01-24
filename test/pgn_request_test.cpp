@@ -1,10 +1,10 @@
 #include <doctest/doctest.h>
-#include <isobus/protocol/pgn_request.hpp>
+#include <agrobus/j1939/pgn_request.hpp>
 
-using namespace isobus;
+using namespace agrobus::j1939;
 
 TEST_CASE("PGNRequestProtocol") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();

@@ -1,10 +1,10 @@
 #include <doctest/doctest.h>
-#include <isobus/vt/objects.hpp>
-#include <isobus/vt/server.hpp>
-#include <isobus/vt/client.hpp>
+#include <agrobus/isobus/vt/objects.hpp>
+#include <agrobus/isobus/vt/server.hpp>
+#include <agrobus/isobus/vt/client.hpp>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::vt;
 
 TEST_CASE("ObjectPool validate") {
     SUBCASE("pool with no working set fails validation") {
@@ -94,7 +94,7 @@ TEST_CASE("ObjectPool validate") {
 }
 
 TEST_CASE("VTServer active WS management") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x26);
     auto* cf = cf_result.value();
@@ -153,7 +153,7 @@ TEST_CASE("VTServer active WS management") {
 }
 
 TEST_CASE("VTClient active WS tracking") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();

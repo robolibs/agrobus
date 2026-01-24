@@ -4,16 +4,16 @@
 // Simulates a multi-sensor marine/agricultural system generating position, speed,
 // wind, temperature, engine, depth, heading, and system time data at realistic rates.
 
-#include <isobus/network/network_manager.hpp>
-#include <isobus/nmea/interface.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/nmea/interface.hpp>
 #include <concord/concord.hpp>
 #include <echo/echo.hpp>
 #include <csignal>
 #include <atomic>
 #include <cmath>
 
-using namespace isobus;
-using namespace isobus::nmea;
+using namespace agrobus::net;
+using namespace agrobus::nmea;
 
 static std::atomic<bool> running{true};
 void signal_handler(int) { running = false; }
@@ -22,7 +22,7 @@ int main() {
     echo::info("=== NMEA2000 Message Generator ===");
 
     // --- Network setup ---
-    NetworkManager nm;
+    IsoNet nm;
     Name name = Name::build()
         .set_identity_number(100)
         .set_manufacturer_code(55)

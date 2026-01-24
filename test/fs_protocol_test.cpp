@@ -1,9 +1,9 @@
 #include <doctest/doctest.h>
-#include <isobus/fs/connection.hpp>
-#include <isobus/fs/properties.hpp>
+#include <agrobus/isobus/fs/connection.hpp>
+#include <agrobus/isobus/fs/properties.hpp>
 
-using namespace isobus;
-using namespace isobus::fs;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::fs;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FileServerProperties tests

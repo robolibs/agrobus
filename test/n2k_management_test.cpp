@@ -1,8 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/nmea/n2k_management.hpp>
+#include <agrobus/nmea/n2k_management.hpp>
 
-using namespace isobus;
-using namespace isobus::nmea;
+using namespace agrobus::nmea;
 
 TEST_CASE("N2KProductInfo encode/decode round-trip") {
     N2KProductInfo info;
@@ -176,7 +175,7 @@ TEST_CASE("N2KHeartbeat encode/decode") {
 }
 
 TEST_CASE("N2KManagement heartbeat timing") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto* cf = nm.create_internal(name, 0, 0x28).value();
 
@@ -223,7 +222,7 @@ TEST_CASE("N2KManagement heartbeat timing") {
 }
 
 TEST_CASE("N2KManagement product info request/response") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto* cf = nm.create_internal(name, 0, 0x28).value();
 
@@ -284,7 +283,7 @@ TEST_CASE("N2KManagement product info request/response") {
 }
 
 TEST_CASE("N2KManagement config info") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto* cf = nm.create_internal(name, 0, 0x28).value();
 

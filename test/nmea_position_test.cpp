@@ -1,8 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/nmea/position.hpp>
+#include <agrobus/nmea/position.hpp>
 
-using namespace isobus;
-using namespace isobus::nmea;
+using namespace agrobus::nmea;
 
 TEST_CASE("GNSSPosition") {
     SUBCASE("default has no fix") {

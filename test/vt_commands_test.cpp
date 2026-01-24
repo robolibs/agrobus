@@ -1,13 +1,14 @@
 #include <doctest/doctest.h>
-#include <isobus/vt/client.hpp>
-#include <isobus/network/network_manager.hpp>
-#include <isobus/core/constants.hpp>
+#include <agrobus/isobus/vt/client.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/net/constants.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 #include <wirebit/link.hpp>
 #include <cstring>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::net;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::vt;
 
 // Mock wirebit Link for VT testing
 class VTMockLink : public wirebit::Link {
@@ -69,7 +70,7 @@ public:
 struct VTTestFixture {
     std::shared_ptr<VTMockLink> link;
     wirebit::CanEndpoint* ep;
-    NetworkManager nm;
+    IsoNet nm;
     InternalCF* cf;
     VTClient* vt;
 

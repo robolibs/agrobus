@@ -1,10 +1,10 @@
 #include <doctest/doctest.h>
-#include <isobus/vt/auxiliary_caps.hpp>
-#include <isobus/vt/client.hpp>
-#include <isobus/vt/commands.hpp>
+#include <agrobus/isobus/vt/auxiliary_caps.hpp>
+#include <agrobus/isobus/vt/client.hpp>
+#include <agrobus/isobus/vt/commands.hpp>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::vt;
 
 // ─── VT v5 Extended Version Label Tests ──────────────────────────────────────
 
@@ -26,7 +26,7 @@ TEST_CASE("VTVersion enum includes Version5") {
 }
 
 TEST_CASE("VTClient extended version fields") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -57,7 +57,7 @@ TEST_CASE("VTClient extended version fields") {
 }
 
 TEST_CASE("VTClient handle_extended_version_response") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -124,7 +124,7 @@ TEST_CASE("VTClient handle_extended_version_response") {
 }
 
 TEST_CASE("VTClient version detection from VT status") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -194,7 +194,7 @@ TEST_CASE("AuxCapabilities default state") {
 }
 
 TEST_CASE("AuxCapabilityDiscovery construction and initial state") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -231,7 +231,7 @@ TEST_CASE("AuxCapabilityDiscovery construction and initial state") {
 }
 
 TEST_CASE("AuxCapabilityDiscovery handle_response") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();

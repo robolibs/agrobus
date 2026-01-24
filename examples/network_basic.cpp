@@ -1,13 +1,13 @@
-#include <isobus/network/network_manager.hpp>
+#include <agrobus/net/network_manager.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 int main() {
     echo::info("=== Network Basic Demo ===");
 
     // Create network with custom config
-    NetworkManager nm(NetworkConfig{}.ports(1).bus_load(true));
+    IsoNet nm(NetworkConfig{}.ports(1).bus_load(true));
 
     // Create our ECU
     Name our_name = Name::build()

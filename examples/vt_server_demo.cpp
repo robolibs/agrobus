@@ -1,11 +1,18 @@
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
-#include <isobus/vt/server.hpp>
+#include <agrobus/isobus/vt/server.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 int main() {
     echo::info("=== VT Server Demo ===");
@@ -22,7 +29,7 @@ int main() {
     wirebit::CanEndpoint endpoint(std::static_pointer_cast<wirebit::Link>(link),
                                   wirebit::CanConfig{.bitrate = 250000}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &endpoint);
 
     Name vt_name = Name::build()

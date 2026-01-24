@@ -1,8 +1,8 @@
 #include <doctest/doctest.h>
-#include <isobus/core/frame.hpp>
-#include <isobus/core/constants.hpp>
+#include <agrobus/net/frame.hpp>
+#include <agrobus/net/constants.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("Frame construction") {
     SUBCASE("default frame") {

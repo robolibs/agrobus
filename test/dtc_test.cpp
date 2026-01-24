@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/protocol/diagnostic.hpp>
+#include <agrobus/j1939/diagnostic.hpp>
 
-using namespace isobus;
+using namespace agrobus::j1939;
 
 TEST_CASE("DTC encode/decode") {
     SUBCASE("basic encode") {

@@ -1,9 +1,9 @@
-#include <isobus/network/network_manager.hpp>
-#include <isobus/protocol/guidance.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/isobus/guidance.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::protocol;
+using namespace agrobus::net;
+using namespace agrobus::isobus;
 
 // Guidance status byte definitions (per ISO 11783-7)
 namespace guidance_status {
@@ -19,7 +19,7 @@ int main() {
     echo::info("and receiving machine info feedback from the implement.\n");
 
     // ─── Network Setup ─────────────────────────────────────────────────────
-    NetworkManager nm;
+    IsoNet nm;
 
     Name name = Name::build()
         .set_identity_number(500)

@@ -1,12 +1,19 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
-#include <isobus/vt/client.hpp>
-#include <isobus/vt/server.hpp>
+#include <agrobus/isobus/vt/client.hpp>
+#include <agrobus/isobus/vt/server.hpp>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 // ─── Dual-node harness for VT client<->server ─────────────────────────────────
 struct VTDualNode {
@@ -14,8 +21,8 @@ struct VTDualNode {
     std::shared_ptr<wirebit::SocketCanLink> link_server;
     wirebit::CanEndpoint ep_client;
     wirebit::CanEndpoint ep_server;
-    NetworkManager nm_client;
-    NetworkManager nm_server;
+    IsoNet nm_client;
+    IsoNet nm_server;
     InternalCF *cf_client = nullptr;
     InternalCF *cf_server = nullptr;
 
@@ -203,7 +210,7 @@ TEST_CASE("VT E2E: Pool transfer with children serialization") {
 }
 
 TEST_CASE("VT E2E: Empty pool rejected by client") {
-    NetworkManager nm;
+    IsoNet nm;
     auto *cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     VTClient client(nm, cf);

@@ -1,9 +1,9 @@
 #include <doctest/doctest.h>
-#include <isobus/network/address_claimer.hpp>
-#include <isobus/network/internal_cf.hpp>
-#include <isobus/core/constants.hpp>
+#include <agrobus/net/address_claimer.hpp>
+#include <agrobus/net/internal_cf.hpp>
+#include <agrobus/net/constants.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("Address claim state machine") {
     Name name;

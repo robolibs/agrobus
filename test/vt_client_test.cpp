@@ -1,11 +1,11 @@
 #include <doctest/doctest.h>
-#include <isobus/vt/client.hpp>
+#include <agrobus/isobus/vt/client.hpp>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::vt;
 
 TEST_CASE("VTClient state machine") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -48,7 +48,7 @@ TEST_CASE("VTClient state machine") {
 }
 
 TEST_CASE("VTClient commands require connected state") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();

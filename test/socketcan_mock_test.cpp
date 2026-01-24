@@ -1,12 +1,12 @@
 #include <doctest/doctest.h>
-#include <isobus/network/network_manager.hpp>
-#include <isobus/core/frame.hpp>
-#include <isobus/core/constants.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/net/frame.hpp>
+#include <agrobus/net/constants.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 #include <wirebit/link.hpp>
 #include <cstring>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 // Mock wirebit Link for testing without hardware
 class MockLink : public wirebit::Link {
@@ -141,11 +141,11 @@ TEST_CASE("CanEndpoint write records frames") {
     CHECK(sent[1].id.pgn() == PGN_DM1);
 }
 
-TEST_CASE("CanEndpoint with NetworkManager") {
+TEST_CASE("CanEndpoint with IsoNet") {
     auto link = std::make_shared<MockLink>();
     wirebit::CanEndpoint ep(link, wirebit::CanConfig{}, 1);
 
-    NetworkManager nm;
+    IsoNet nm;
     nm.set_endpoint(0, &ep);
 
     Name name;

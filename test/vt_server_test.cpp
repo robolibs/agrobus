@@ -1,12 +1,19 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
-#include <isobus/vt/server.hpp>
+#include <agrobus.hpp>
+#include <agrobus/isobus/vt/server.hpp>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 TEST_CASE("VTServer - initialization and state") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     VTServer server(nm, cf);
@@ -28,7 +35,7 @@ TEST_CASE("VTServer - initialization and state") {
 }
 
 TEST_CASE("VTServer - screen configuration") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     VTServer server(nm, cf, VTServerConfig{}.screen(320, 240).version(4));
@@ -37,7 +44,7 @@ TEST_CASE("VTServer - screen configuration") {
 }
 
 TEST_CASE("VTServer - client tracking") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     VTServer server(nm, cf);
@@ -47,7 +54,7 @@ TEST_CASE("VTServer - client tracking") {
 }
 
 TEST_CASE("VTServer - update sends status periodically") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     VTServer server(nm, cf);

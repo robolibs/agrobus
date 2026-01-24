@@ -1,9 +1,17 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 // Helper: create a frame that looks like a file server response
 static Frame make_server_response(Address server_addr, Address client_addr, FileOperation op, FileTransferError err,
@@ -22,7 +30,7 @@ struct ClientSetup {
     std::shared_ptr<wirebit::SocketCanLink> harness_link;
     wirebit::CanEndpoint dut_ep;
     wirebit::CanEndpoint harness_ep;
-    NetworkManager nm;
+    IsoNet nm;
     InternalCF *cf = nullptr;
     FileClient *client = nullptr;
 
@@ -152,7 +160,7 @@ TEST_CASE("FileClient - one-inflight rule: different operations all respect one-
 }
 
 TEST_CASE("FileServer - busy cadence switches between 200ms busy and 2000ms idle") {
-    NetworkManager nm;
+    IsoNet nm;
     auto *cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     FileServer server(nm, cf, FileServerConfig{}.path("/data"));
@@ -184,7 +192,7 @@ TEST_CASE("FileServer - busy cadence switches between 200ms busy and 2000ms idle
         wirebit::CanEndpoint busy_ep(busy_link, wirebit::CanConfig{}, 3);
         wirebit::CanEndpoint harness_ep2(harness_link2, wirebit::CanConfig{}, 4);
 
-        NetworkManager nm2;
+        IsoNet nm2;
         nm2.set_endpoint(0, &busy_ep);
         auto *cf2 = nm2.create_internal(Name::build().set_identity_number(2), 0, 0x20).value();
 

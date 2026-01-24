@@ -1,10 +1,18 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
+#include <agrobus.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 TEST_CASE("FileServer - initialization") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     FileServer server(nm, cf, FileServerConfig{}.path("/data"));
@@ -15,7 +23,7 @@ TEST_CASE("FileServer - initialization") {
 }
 
 TEST_CASE("FileServer - file management") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     FileServer server(nm, cf);
@@ -41,7 +49,7 @@ TEST_CASE("FileServer - file management") {
 }
 
 TEST_CASE("FileServer - events") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     FileServer server(nm, cf);
@@ -57,7 +65,7 @@ TEST_CASE("FileServer - events") {
 }
 
 TEST_CASE("FileClient - initialization") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     FileClient client(nm, cf);
@@ -68,7 +76,7 @@ TEST_CASE("FileClient - initialization") {
 }
 
 TEST_CASE("FileClient - state management") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     FileClient client(nm, cf);

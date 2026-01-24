@@ -1,19 +1,27 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 // ─── Multi-node test harness ─────────────────────────────────────────────────
-// Two NetworkManagers connected via shared vcan interface (kernel loopback)
+// Two IsoNets connected via shared vcan interface (kernel loopback)
 struct DualNodeSetup {
     std::shared_ptr<wirebit::SocketCanLink> link_a;
     std::shared_ptr<wirebit::SocketCanLink> link_b;
     wirebit::CanEndpoint ep_a;
     wirebit::CanEndpoint ep_b;
-    NetworkManager nm_a;
-    NetworkManager nm_b;
+    IsoNet nm_a;
+    IsoNet nm_b;
     InternalCF *cf_a = nullptr;
     InternalCF *cf_b = nullptr;
 

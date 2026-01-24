@@ -1,11 +1,18 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
+#include <agrobus.hpp>
 
-using namespace isobus;
-using namespace isobus::vt;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 TEST_CASE("VTClient - macro registration") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     VTClient client(nm, cf);
@@ -56,7 +63,7 @@ TEST_CASE("VTClient - macro registration") {
 }
 
 TEST_CASE("VTClient - execute_macro requires connection") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     VTClient client(nm, cf);
@@ -67,7 +74,7 @@ TEST_CASE("VTClient - execute_macro requires connection") {
 }
 
 TEST_CASE("VTClient - delete_pool requires connection") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     VTClient client(nm, cf);
@@ -76,7 +83,7 @@ TEST_CASE("VTClient - delete_pool requires connection") {
 }
 
 TEST_CASE("VTClient - VT version") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     VTClient client(nm, cf);
@@ -85,7 +92,7 @@ TEST_CASE("VTClient - VT version") {
 }
 
 TEST_CASE("VTClient - macro executed event") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     VTClient client(nm, cf);

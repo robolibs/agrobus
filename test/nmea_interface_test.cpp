@@ -1,11 +1,10 @@
 #include <doctest/doctest.h>
-#include <isobus/nmea/interface.hpp>
+#include <agrobus/nmea/interface.hpp>
 
-using namespace isobus;
-using namespace isobus::nmea;
+using namespace agrobus::nmea;
 
 TEST_CASE("NMEAInterface construction") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -17,7 +16,7 @@ TEST_CASE("NMEAInterface construction") {
 }
 
 TEST_CASE("NMEAInterface event subscription") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -46,7 +45,7 @@ TEST_CASE("NMEAInterface event subscription") {
 }
 
 TEST_CASE("NMEAInterface send_position") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -64,7 +63,7 @@ TEST_CASE("NMEAInterface send_position") {
 }
 
 TEST_CASE("NMEAInterface send_cog_sog") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();

@@ -1,10 +1,9 @@
 #include <doctest/doctest.h>
-#include <isobus/core/constants.hpp>
-#include <isobus/core/frame.hpp>
-#include <isobus/niu/niu.hpp>
+#include <agrobus/net/constants.hpp>
+#include <agrobus/net/frame.hpp>
+#include <agrobus/net/niu.hpp>
 
-using namespace isobus;
-using namespace isobus::niu;
+using namespace agrobus::net;
 
 // Helper to create a test frame with a given PGN
 static Frame make_frame(PGN pgn, Address src = 0x28, Address dst = BROADCAST_ADDRESS) {
@@ -30,8 +29,8 @@ TEST_CASE("NIU construction and configuration") {
 
 TEST_CASE("NIU attach networks") {
     NIU niu;
-    NetworkManager tractor_net;
-    NetworkManager implement_net;
+    IsoNet tractor_net;
+    IsoNet implement_net;
 
     SUBCASE("attach null tractor network fails") {
         auto result = niu.attach_tractor(nullptr);
@@ -53,8 +52,8 @@ TEST_CASE("NIU attach networks") {
 
 TEST_CASE("NIU start/stop") {
     NIU niu;
-    NetworkManager tractor_net;
-    NetworkManager implement_net;
+    IsoNet tractor_net;
+    IsoNet implement_net;
 
     SUBCASE("start without networks fails") {
         auto result = niu.start();
@@ -105,8 +104,8 @@ TEST_CASE("NIU filter management") {
 
 TEST_CASE("NIU forwarding with default allow policy") {
     NIU niu;
-    NetworkManager tractor_net;
-    NetworkManager implement_net;
+    IsoNet tractor_net;
+    IsoNet implement_net;
     niu.attach_tractor(&tractor_net);
     niu.attach_implement(&implement_net);
     niu.start();
@@ -144,8 +143,8 @@ TEST_CASE("NIU forwarding with block-all defaults") {
     NIUConfig cfg;
     cfg.global_default(false).specific_default(false);
     NIU niu(cfg);
-    NetworkManager tractor_net;
-    NetworkManager implement_net;
+    IsoNet tractor_net;
+    IsoNet implement_net;
     niu.attach_tractor(&tractor_net);
     niu.attach_implement(&implement_net);
     niu.start();
@@ -168,8 +167,8 @@ TEST_CASE("NIU forwarding with block-all defaults") {
 
 TEST_CASE("NIU block filter") {
     NIU niu;
-    NetworkManager tractor_net;
-    NetworkManager implement_net;
+    IsoNet tractor_net;
+    IsoNet implement_net;
     niu.attach_tractor(&tractor_net);
     niu.attach_implement(&implement_net);
     niu.start();
@@ -200,8 +199,8 @@ TEST_CASE("NIU block filter") {
 
 TEST_CASE("NIU monitor filter") {
     NIU niu;
-    NetworkManager tractor_net;
-    NetworkManager implement_net;
+    IsoNet tractor_net;
+    IsoNet implement_net;
     niu.attach_tractor(&tractor_net);
     niu.attach_implement(&implement_net);
     niu.start();
@@ -222,8 +221,8 @@ TEST_CASE("NIU monitor filter") {
 
 TEST_CASE("NIU events") {
     NIU niu;
-    NetworkManager tractor_net;
-    NetworkManager implement_net;
+    IsoNet tractor_net;
+    IsoNet implement_net;
     niu.attach_tractor(&tractor_net);
     niu.attach_implement(&implement_net);
     niu.start();
@@ -260,8 +259,8 @@ TEST_CASE("NIU events") {
 
 TEST_CASE("NIU does not process when inactive") {
     NIU niu;
-    NetworkManager tractor_net;
-    NetworkManager implement_net;
+    IsoNet tractor_net;
+    IsoNet implement_net;
     niu.attach_tractor(&tractor_net);
     niu.attach_implement(&implement_net);
     // Do NOT start
@@ -274,8 +273,8 @@ TEST_CASE("NIU does not process when inactive") {
 
 TEST_CASE("NIU unidirectional filter") {
     NIU niu;
-    NetworkManager tractor_net;
-    NetworkManager implement_net;
+    IsoNet tractor_net;
+    IsoNet implement_net;
     niu.attach_tractor(&tractor_net);
     niu.attach_implement(&implement_net);
     niu.start();

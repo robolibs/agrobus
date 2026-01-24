@@ -1,11 +1,11 @@
 #include <doctest/doctest.h>
-#include <isobus/tc/ddi_database.hpp>
-#include <isobus/tc/ddop.hpp>
-#include <isobus/tc/ddop_helpers.hpp>
+#include <agrobus/isobus/tc/ddi_database.hpp>
+#include <agrobus/isobus/tc/ddop.hpp>
+#include <agrobus/isobus/tc/ddop_helpers.hpp>
 
-using namespace isobus;
-using namespace isobus::tc;
-namespace ddi = isobus::tc::ddi;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::tc;
+namespace ddi = agrobus::isobus::tc::ddi;
 
 TEST_CASE("DDOP creation") {
     DDOP ddop;

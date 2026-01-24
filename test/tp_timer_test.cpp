@@ -1,8 +1,8 @@
 #include <doctest/doctest.h>
-#include <isobus/transport/tp.hpp>
-#include <isobus/core/constants.hpp>
+#include <agrobus/net/tp.hpp>
+#include <agrobus/net/constants.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("TP timer - session timeout detection (WaitForCTS)") {
     TransportProtocol tp;

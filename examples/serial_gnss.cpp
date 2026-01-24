@@ -1,4 +1,4 @@
-#include <isobus/nmea/serial_gnss.hpp>
+#include <agrobus/nmea/serial_gnss.hpp>
 #include <echo/echo.hpp>
 #include <wirebit/serial/serial_endpoint.hpp>
 #include <wirebit/shm/shm_link.hpp>
@@ -6,8 +6,7 @@
 #include <atomic>
 #include <cstring>
 
-using namespace isobus;
-using namespace isobus::nmea;
+using namespace agrobus::nmea;
 
 static std::atomic<bool> running{true};
 void signal_handler(int) { running = false; }

@@ -1,8 +1,8 @@
 #include <doctest/doctest.h>
-#include <isobus/implement/tractor_commands.hpp>
+#include <agrobus/isobus/implement/tractor_commands.hpp>
 
-using namespace isobus;
-using namespace isobus::implement;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::implement;
 
 // ─── PGN Constants ───────────────────────────────────────────────────────────
 
@@ -307,7 +307,7 @@ TEST_CASE("AuxValveCommandMsg decode") {
 // ─── TractorCommands Class ───────────────────────────────────────────────────
 
 TEST_CASE("TractorCommands construction") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -331,7 +331,7 @@ TEST_CASE("TractorCommands construction") {
 }
 
 TEST_CASE("TractorCommands events") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -434,7 +434,7 @@ TEST_CASE("TractorCommands events") {
 }
 
 TEST_CASE("TractorCommands send methods API") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();

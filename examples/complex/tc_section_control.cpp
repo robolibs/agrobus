@@ -3,7 +3,7 @@
 ///        16-section sprayer section control.
 ///
 /// This example demonstrates:
-///   - Setting up NetworkManager, Name, and InternalCF
+///   - Setting up IsoNet, Name, and InternalCF
 ///   - Building a complete DDOP (Device Descriptor Object Pool) for a 16-section sprayer
 ///   - Creating a TaskControllerClient and initiating connection
 ///   - Handling value requests (section state, actual work state, area counters)
@@ -11,15 +11,16 @@
 ///   - Running the TC client state machine
 
 #include <echo/echo.hpp>
-#include <isobus/network/network_manager.hpp>
-#include <isobus/tc/client.hpp>
-#include <isobus/tc/ddi_database.hpp>
-#include <isobus/tc/ddop.hpp>
-#include <isobus/tc/objects.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/isobus/tc/client.hpp>
+#include <agrobus/isobus/tc/ddi_database.hpp>
+#include <agrobus/isobus/tc/ddop.hpp>
+#include <agrobus/isobus/tc/objects.hpp>
 
-using namespace isobus;
-using namespace isobus::tc;
-namespace ddi = isobus::tc::ddi;
+using namespace agrobus::net;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::tc;
+namespace ddi = agrobus::isobus::tc::ddi;
 
 // ─── Sprayer Application State ──────────────────────────────────────────────────
 struct SprayerState {
@@ -234,7 +235,7 @@ int main() {
     echo::box("=== TC Section Control Demo (16-Section Sprayer) ===");
 
     // ─── Network Setup ──────────────────────────────────────────────────────
-    NetworkManager nm;
+    IsoNet nm;
 
     Name name = Name::build()
                     .set_identity_number(2001)

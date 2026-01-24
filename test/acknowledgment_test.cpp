@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/protocol/acknowledgment.hpp>
+#include <agrobus/j1939/acknowledgment.hpp>
 
-using namespace isobus;
+using namespace agrobus::j1939;
 
 TEST_CASE("Acknowledgment encode/decode") {
     SUBCASE("round-trip positive ACK") {
@@ -112,7 +112,7 @@ TEST_CASE("AckControl enum values") {
 }
 
 TEST_CASE("AcknowledgmentHandler") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();

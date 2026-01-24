@@ -1,11 +1,19 @@
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <echo/echo.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 #include <csignal>
 #include <atomic>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 static std::atomic<bool> running{true};
 void signal_handler(int) { running = false; }
@@ -30,7 +38,7 @@ int main(int argc, char* argv[]) {
     wirebit::CanEndpoint can(link, wirebit::CanConfig{.bitrate = 250000}, 1);
 
     // --- Network ---
-    NetworkManager nm(NetworkConfig{}.bus_load(true));
+    IsoNet nm(NetworkConfig{}.bus_load(true));
     nm.set_endpoint(0, &can);
 
     Name our_name = Name::build()
@@ -57,7 +65,7 @@ int main(int argc, char* argv[]) {
     GuidanceInterface guidance(nm, cf);
     guidance.initialize();
 
-    nmea::NMEAInterface gnss(nm, cf);
+    NMEAInterface gnss(nm, cf);
     gnss.initialize();
 
     // --- TC Client ---
@@ -95,7 +103,7 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    gnss.on_position.subscribe([](const nmea::GNSSPosition& pos) {
+    gnss.on_position.subscribe([](const GNSSPosition& pos) {
         echo::info("GNSS: ", pos.wgs.latitude, ", ", pos.wgs.longitude,
                    " fix=", static_cast<int>(pos.fix_type));
     });

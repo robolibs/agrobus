@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/protocol/diagnostic.hpp>
+#include <agrobus/j1939/diagnostic.hpp>
 
-using namespace isobus;
+using namespace agrobus::j1939;
 
 TEST_CASE("DTC encode/decode") {
     SUBCASE("basic encode") {
@@ -61,7 +61,7 @@ TEST_CASE("DiagnosticLamps encode/decode") {
 }
 
 TEST_CASE("DiagnosticProtocol DTC management") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();
@@ -129,7 +129,7 @@ TEST_CASE("DM5 DiagnosticProtocolID") {
     }
 
     SUBCASE("set_diag_protocol and accessor") {
-        NetworkManager nm;
+        IsoNet nm;
         Name name;
         auto cf_result = nm.create_internal(name, 0, 0x28);
         auto *cf = cf_result.value();
@@ -143,7 +143,7 @@ TEST_CASE("DM5 DiagnosticProtocolID") {
 }
 
 TEST_CASE("DM13 suspend duration tracking") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto *cf = cf_result.value();

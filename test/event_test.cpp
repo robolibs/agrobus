@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/util/event.hpp>
+#include <agrobus/net/event.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("Event subscribe/emit") {
     SUBCASE("single listener") {

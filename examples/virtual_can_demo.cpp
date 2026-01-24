@@ -1,9 +1,17 @@
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 int main() {
     echo::info("=== Virtual CAN Demo ===");
@@ -33,10 +41,10 @@ int main() {
     echo::info("Created virtual CAN endpoints on vcan_demo (no hardware needed)");
 
     // Setup two network managers
-    NetworkManager nm1;
+    IsoNet nm1;
     nm1.set_endpoint(0, &endpoint1);
 
-    NetworkManager nm2;
+    IsoNet nm2;
     nm2.set_endpoint(0, &endpoint2);
 
     auto* ecu1 = nm1.create_internal(

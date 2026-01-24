@@ -1,12 +1,19 @@
 #include <doctest/doctest.h>
-#include <isobus/tc/geo.hpp>
-#include <isobus.hpp>
+#include <agrobus/isobus/tc/geo.hpp>
+#include <agrobus.hpp>
 
-using namespace isobus;
-using namespace isobus::tc;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 TEST_CASE("TCGEOInterface - initialization") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TCGEOInterface geo(nm, cf);
@@ -17,7 +24,7 @@ TEST_CASE("TCGEOInterface - initialization") {
 }
 
 TEST_CASE("TCGEOInterface - prescription map management") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TCGEOInterface geo(nm, cf);
@@ -46,7 +53,7 @@ TEST_CASE("TCGEOInterface - prescription map management") {
 }
 
 TEST_CASE("TCGEOInterface - position update") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TCGEOInterface geo(nm, cf);
@@ -67,7 +74,7 @@ TEST_CASE("TCGEOInterface - position update") {
 }
 
 TEST_CASE("TCGEOInterface - rate at position") {
-    NetworkManager nm;
+    IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
     TCGEOInterface geo(nm, cf);

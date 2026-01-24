@@ -1,13 +1,14 @@
 #include <doctest/doctest.h>
-#include <isobus/sc/client.hpp>
-#include <isobus/sc/master.hpp>
+#include <agrobus/isobus/sc/client.hpp>
+#include <agrobus/isobus/sc/master.hpp>
 
-using namespace isobus;
+using namespace agrobus::isobus;
+using namespace agrobus::isobus::sc;
 
-// ─── Helper: create a NetworkManager + InternalCF pair ────────────────────────
+// ─── Helper: create a IsoNet + InternalCF pair ────────────────────────
 static auto make_test_env() {
     struct Env {
-        NetworkManager nm;
+        IsoNet nm;
         InternalCF *cf;
     };
     Env env;
@@ -419,9 +420,9 @@ TEST_CASE("SCMaster: on_client_status event") {
     CHECK(master.state() == SCState::Ready);
 }
 
-// ─── Integration: Master + Client via shared NetworkManager ───────────────────
+// ─── Integration: Master + Client via shared IsoNet ───────────────────
 TEST_CASE("SCMaster + SCClient: integrated state flow") {
-    NetworkManager nm;
+    IsoNet nm;
     Name master_name;
     Name client_name;
 

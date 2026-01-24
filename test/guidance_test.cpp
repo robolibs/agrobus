@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
-#include <isobus/protocol/guidance.hpp>
+#include <agrobus/isobus/guidance.hpp>
 
-using namespace isobus;
+using namespace agrobus::isobus;
 
 TEST_CASE("GuidanceData") {
     GuidanceData gd;
@@ -14,7 +14,7 @@ TEST_CASE("GuidanceData") {
 }
 
 TEST_CASE("GuidanceInterface creation") {
-    NetworkManager nm;
+    IsoNet nm;
     Name name;
     auto cf_result = nm.create_internal(name, 0, 0x28);
     auto* cf = cf_result.value();

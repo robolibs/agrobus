@@ -1,11 +1,18 @@
 #include <doctest/doctest.h>
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
-#include <isobus/nmea/n2k_management.hpp>
+#include <agrobus/nmea/n2k_management.hpp>
 
-using namespace isobus;
-using namespace isobus::nmea;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 // Helper: create a frame that looks like a product info response (fast packet first frame)
 static Frame make_product_info_response(Address source, Address dest) {
@@ -48,7 +55,7 @@ struct N2KSetup {
     std::shared_ptr<wirebit::SocketCanLink> harness_link;
     wirebit::CanEndpoint dut_ep;
     wirebit::CanEndpoint harness_ep;
-    NetworkManager nm;
+    IsoNet nm;
     InternalCF *cf = nullptr;
     N2KManagement *mgmt = nullptr;
 

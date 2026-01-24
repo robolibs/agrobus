@@ -1,9 +1,17 @@
-#include <isobus.hpp>
+#include <agrobus.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
 
 int main() {
     echo::info("=== Tractor Implement Management Demo ===");
@@ -25,7 +33,7 @@ int main() {
                                    wirebit::CanConfig{.bitrate = 250000}, 2);
 
     // Tractor ECU
-    NetworkManager nm_tractor;
+    IsoNet nm_tractor;
     nm_tractor.set_endpoint(0, &endpoint1);
     auto* tractor_cf = nm_tractor.create_internal(
         Name::build().set_identity_number(1).set_manufacturer_code(100).set_function_code(25).set_self_configurable(true),
@@ -37,7 +45,7 @@ int main() {
     tim_server.set_aux_valve_capabilities(1, true, false);
 
     // Implement ECU
-    NetworkManager nm_impl;
+    IsoNet nm_impl;
     nm_impl.set_endpoint(0, &endpoint2);
     auto* impl_cf = nm_impl.create_internal(
         Name::build().set_identity_number(2).set_manufacturer_code(200).set_function_code(30).set_self_configurable(true),

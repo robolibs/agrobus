@@ -5,17 +5,16 @@
 // multi-frame message transfer, event subscription, update loops, and simulated
 // peer responses.
 //
-// TransportProtocol is standalone -- no NetworkManager dependency for frame
+// TransportProtocol is standalone -- no IsoNet dependency for frame
 // generation. It produces CAN frames that the application is responsible for
 // transmitting on the physical bus.
 
-#include <isobus/transport/tp.hpp>
-#include <isobus/core/frame.hpp>
-#include <isobus/core/identifier.hpp>
+#include <agrobus/net/tp.hpp>
+#include <agrobus/net/frame.hpp>
+#include <agrobus/net/identifier.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::transport;
+using namespace agrobus::net;
 
 // ---------------------------------------------------------------------------
 // Helpers

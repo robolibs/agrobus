@@ -1,13 +1,14 @@
-#include <isobus/network/network_manager.hpp>
-#include <isobus/protocol/speed_distance.hpp>
-#include <isobus/protocol/heartbeat.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/j1939/speed_distance.hpp>
+#include <agrobus/j1939/heartbeat.hpp>
 #include <wirebit/can/socketcan_link.hpp>
 #include <wirebit/can/can_endpoint.hpp>
 #include <echo/echo.hpp>
 #include <csignal>
 #include <atomic>
 
-using namespace isobus;
+using namespace agrobus::net;
+using namespace agrobus::j1939;
 
 static std::atomic<bool> running{true};
 
@@ -36,7 +37,7 @@ int main(int argc, char* argv[]) {
     wirebit::CanEndpoint can(link, wirebit::CanConfig{.bitrate = 250000}, 1);
 
     // Create network
-    NetworkManager nm(NetworkConfig{}.bus_load(true));
+    IsoNet nm(NetworkConfig{}.bus_load(true));
     nm.set_endpoint(0, &can);
 
     // Create our device

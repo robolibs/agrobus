@@ -9,13 +9,12 @@
 //   4. Subscribing to the on_message event for completed reassemblies
 //   5. Using update() for timeout-based session cleanup
 
-#include <isobus/transport/fast_packet.hpp>
-#include <isobus/core/frame.hpp>
-#include <isobus/core/identifier.hpp>
+#include <agrobus/net/fast_packet.hpp>
+#include <agrobus/net/frame.hpp>
+#include <agrobus/net/identifier.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
-using namespace isobus::transport;
+using namespace agrobus::net;
 
 static constexpr Address SOURCE_ADDR = 0x40;
 

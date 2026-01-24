@@ -1,10 +1,10 @@
 #include <doctest/doctest.h>
-#include <isobus/core/types.hpp>
-#include <isobus/core/name.hpp>
-#include <isobus/core/identifier.hpp>
-#include <isobus/core/constants.hpp>
+#include <agrobus/net/types.hpp>
+#include <agrobus/net/name.hpp>
+#include <agrobus/net/identifier.hpp>
+#include <agrobus/net/constants.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("Name encoding/decoding") {
     SUBCASE("default name is zero") {

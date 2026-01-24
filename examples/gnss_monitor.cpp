@@ -1,16 +1,16 @@
-#include <isobus/network/network_manager.hpp>
-#include <isobus/nmea/interface.hpp>
-#include <isobus/nmea/position.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/nmea/interface.hpp>
+#include <agrobus/nmea/position.hpp>
 #include <echo/echo.hpp>
 #include <cmath>
 
-using namespace isobus;
-using namespace isobus::nmea;
+using namespace agrobus::net;
+using namespace agrobus::nmea;
 
 int main() {
     echo::info("=== GNSS Monitor Demo ===");
 
-    NetworkManager nm;
+    IsoNet nm;
     Name name = Name::build()
         .set_identity_number(1)
         .set_manufacturer_code(42);

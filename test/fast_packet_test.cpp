@@ -1,8 +1,8 @@
 #include <doctest/doctest.h>
-#include <isobus/transport/fast_packet.hpp>
-#include <isobus/core/constants.hpp>
+#include <agrobus/net/fast_packet.hpp>
+#include <agrobus/net/constants.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 TEST_CASE("Fast Packet send") {
     FastPacketProtocol fp;

@@ -1,14 +1,14 @@
-#include <isobus/network/network_manager.hpp>
-#include <isobus/network/address_claimer.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <agrobus/net/address_claimer.hpp>
 #include <echo/echo.hpp>
 
-using namespace isobus;
+using namespace agrobus::net;
 
 int main() {
     echo::info("=== Address Claim Demo ===");
 
     // Create network manager
-    NetworkManager nm;
+    IsoNet nm;
 
     // Create our device identity
     Name name = Name::build()
