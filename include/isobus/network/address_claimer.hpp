@@ -25,6 +25,12 @@ namespace isobus {
             // with higher priority NAME, yield.
             u32 claim_guard_timer_ms_ = 0;
 
+            // ISO 11783-5 §4.4.3: When re-claiming after yielding, apply RTxD delay
+            // before sending the new claim frame.
+            bool reclaim_pending_ = false;
+            u32 reclaim_delay_timer_ms_ = 0;
+            Address reclaim_address_ = NULL_ADDRESS;
+
           public:
             // rtxd_ms: Random transmit delay in ms (0-153, per ISO 11783-5 §3.4).
             // Caller should provide 0.6 × random_byte (0-255) as the RTxD value.
@@ -74,6 +80,23 @@ namespace isobus {
             dp::Vector<Frame> update(u32 elapsed_ms) {
                 dp::Vector<Frame> frames;
 
+                // Handle pending re-claim with RTxD delay
+                if (reclaim_pending_) {
+                    reclaim_delay_timer_ms_ += elapsed_ms;
+                    if (reclaim_delay_timer_ms_ >= rtxd_ms_) {
+                        reclaim_pending_ = false;
+                        cf_->set_address(reclaim_address_);
+                        cf_->reset_claim_timer();
+                        claim_guard_timer_ms_ = 0;
+                        cf_->state_machine().transition(ClaimState::SendClaim);
+                        frames.push_back(make_claim_frame(reclaim_address_));
+                        cf_->state_machine().transition(ClaimState::WaitForContest);
+                        echo::category("isobus.network.claim")
+                            .debug("re-claim sent after RTxD: addr=", reclaim_address_);
+                    }
+                    return frames;
+                }
+
                 if (cf_->claim_state() == ClaimState::WaitForContest) {
                     cf_->add_claim_time(elapsed_ms);
                     claim_guard_timer_ms_ += elapsed_ms;
@@ -113,15 +136,25 @@ namespace isobus {
                     cf_->on_address_lost.emit();
 
                     if (cf_->name().self_configurable()) {
-                        // Try next address
+                        // Try next address with RTxD delay per ISO 11783-5 §4.4.3
                         Address next = find_next_address(claimed_address);
                         if (next <= MAX_ADDRESS) {
-                            cf_->set_address(next);
-                            cf_->reset_claim_timer();
-                            claim_guard_timer_ms_ = 0;
-                            cf_->state_machine().transition(ClaimState::SendClaim);
-                            frames.push_back(make_claim_frame(next));
-                            cf_->state_machine().transition(ClaimState::WaitForContest);
+                            if (rtxd_ms_ > 0) {
+                                // Queue re-claim with RTxD delay
+                                reclaim_pending_ = true;
+                                reclaim_delay_timer_ms_ = 0;
+                                reclaim_address_ = next;
+                                echo::category("isobus.network.claim")
+                                    .debug("re-claim queued with RTxD=", rtxd_ms_, "ms: addr=", next);
+                            } else {
+                                // No RTxD configured, send immediately
+                                cf_->set_address(next);
+                                cf_->reset_claim_timer();
+                                claim_guard_timer_ms_ = 0;
+                                cf_->state_machine().transition(ClaimState::SendClaim);
+                                frames.push_back(make_claim_frame(next));
+                                cf_->state_machine().transition(ClaimState::WaitForContest);
+                            }
                         } else {
                             echo::category("isobus.network.claim").error("no available address, claim failed");
                             cf_->state_machine().transition(ClaimState::Failed);

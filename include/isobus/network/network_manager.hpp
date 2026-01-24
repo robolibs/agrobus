@@ -280,6 +280,10 @@ namespace isobus {
             dp::Vector<InternalCF> &internal_cfs() noexcept { return internal_cfs_; }
             dp::Vector<PartnerCF> &partner_cfs() noexcept { return partner_cfs_; }
 
+            // ─── Test injection ──────────────────────────────────────────────────────
+            // Inject a message directly into the PGN callback dispatch (for unit testing)
+            void inject_message(const Message &msg) { dispatch_message(msg); }
+
             // ─── Events ──────────────────────────────────────────────────────────────
             Event<const Message &> on_message;
             Event<ControlFunction *, CFState> on_cf_state_change;

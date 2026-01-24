@@ -91,3 +91,45 @@ TEST_CASE("Address claimed event") {
     claimer.update(ADDRESS_CLAIM_TIMEOUT_MS);
     CHECK(claimed_addr == 0x10);
 }
+
+TEST_CASE("Address claim re-claim with RTxD delay") {
+    Name our_name;
+    our_name.set_identity_number(100);
+    our_name.set_manufacturer_code(50);
+    our_name.set_self_configurable(true);
+
+    InternalCF cf(our_name, 0, 0x28);
+    // RTxD = 50ms (simulating 0.6ms * ~83)
+    AddressClaimer claimer(&cf, ADDRESS_CLAIM_TIMEOUT_MS, 50);
+    claimer.start();
+
+    Name other_name;
+    other_name.set_identity_number(50); // Higher priority
+    other_name.set_manufacturer_code(50);
+
+    SUBCASE("re-claim is deferred by RTxD") {
+        auto frames = claimer.handle_claim(0x28, other_name);
+        // With RTxD > 0, no frame is returned immediately
+        CHECK(frames.empty());
+
+        // Before RTxD expires, no frame emitted
+        auto frames2 = claimer.update(30);
+        CHECK(frames2.empty());
+
+        // After RTxD expires, the re-claim frame is sent
+        auto frames3 = claimer.update(25);
+        CHECK(!frames3.empty());
+        CHECK(cf.claim_state() == ClaimState::WaitForContest);
+    }
+
+    SUBCASE("re-claim succeeds after RTxD + guard window") {
+        claimer.handle_claim(0x28, other_name);
+        // Wait for RTxD (50ms)
+        claimer.update(55);
+        // Now wait for guard window (250ms + RTxD = 300ms total timeout)
+        claimer.update(300);
+        CHECK(cf.claim_state() == ClaimState::Claimed);
+        // Address should be different from the contested one
+        CHECK(cf.address() != 0x28);
+    }
+}

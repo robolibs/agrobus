@@ -559,8 +559,24 @@ namespace isobus {
                                 // CTS hold: receiver is busy, stay in WaitingForCTS
                                 s.timer_ms = 0;
                             } else {
+                                // Validate CTS parameters per ISO 11783-3
+                                u32 remaining_packets = s.total_packets() - (next_seq - 1);
+                                if (next_seq == 0 || next_seq > s.total_packets()) {
+                                    // Invalid next_seq - abort
+                                    echo::category("isobus.transport.tp")
+                                        .warn("CTS invalid next_seq=", next_seq, " total_packets=", s.total_packets());
+                                    s.state = SessionState::Aborted;
+                                    on_abort.emit(s, TransportAbortReason::BadSequence);
+                                    responses.push_back(make_abort(s, TransportAbortReason::BadSequence));
+                                    erase_session(&s);
+                                    break;
+                                }
+                                // Clamp num_packets to remaining data
+                                u8 clamped_packets = (num_packets > remaining_packets)
+                                                         ? static_cast<u8>(remaining_packets)
+                                                         : num_packets;
                                 s.state = SessionState::SendingData;
-                                s.packets_to_send = num_packets;
+                                s.packets_to_send = clamped_packets;
                                 // Set bytes_transferred to match the requested next_seq
                                 s.bytes_transferred = static_cast<u32>(next_seq - 1) * 7;
                                 s.last_sequence = next_seq - 1;

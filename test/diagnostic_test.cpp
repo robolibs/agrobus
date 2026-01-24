@@ -141,3 +141,72 @@ TEST_CASE("DM5 DiagnosticProtocolID") {
         CHECK(diag.diag_protocol_id().protocols == 0x03);
     }
 }
+
+TEST_CASE("DM13 suspend duration tracking") {
+    NetworkManager nm;
+    Name name;
+    auto cf_result = nm.create_internal(name, 0, 0x28);
+    auto *cf = cf_result.value();
+
+    DiagnosticProtocol diag(nm, cf);
+    diag.initialize();
+
+    // Helper: create a DM13 message
+    auto make_dm13 = [](u8 byte0, u16 duration) -> Message {
+        Message msg;
+        msg.pgn = PGN_DM13;
+        msg.source = 0x30;
+        msg.destination = 0x28;
+        msg.data = {byte0, 0xFF, static_cast<u8>(duration & 0xFF), static_cast<u8>((duration >> 8) & 0xFF),
+                    0xFF, 0xFF, 0xFF, 0xFF};
+        return msg;
+    };
+
+    // Track DM13 events
+    bool dm13_received = false;
+    DM13Signals received_signals;
+    diag.on_dm13_received.subscribe([&](const DM13Signals &sig, Address) {
+        dm13_received = true;
+        received_signals = sig;
+    });
+
+    SUBCASE("finite suspend duration auto-resumes") {
+        // Byte 0: hold(bits7-6)=DoNotCare(3), dm1(bits5-4)=Suspend(0), dm2(bits3-2)=DoNotCare(3), dm3(bits1-0)=DoNotCare(3)
+        // = 0b11_00_11_11 = 0xCF
+        nm.inject_message(make_dm13(0xCF, 5)); // dm1=suspend, duration=5s
+
+        CHECK(dm13_received);
+        CHECK(received_signals.dm1_signal == DM13Command::SuspendBroadcast);
+        CHECK(received_signals.suspend_duration_s == 5);
+        CHECK(diag.is_dm1_suspended());
+
+        // After 4 seconds, still suspended
+        diag.update(4000);
+        CHECK(diag.is_dm1_suspended());
+
+        // After 5 seconds total (1 more), auto-resume
+        diag.update(1000);
+        CHECK(!diag.is_dm1_suspended());
+    }
+
+    SUBCASE("indefinite suspend does not auto-resume") {
+        nm.inject_message(make_dm13(0xCF, 0xFFFF)); // dm1=suspend, indefinite
+
+        CHECK(diag.is_dm1_suspended());
+
+        // Even after a very long time, stays suspended
+        diag.update(60000);
+        CHECK(diag.is_dm1_suspended());
+    }
+
+    SUBCASE("resume message clears suspend") {
+        // First suspend with 10s duration
+        nm.inject_message(make_dm13(0xCF, 10));
+        CHECK(diag.is_dm1_suspended());
+
+        // Then explicitly resume before duration expires
+        // dm1_signal=Resume(1): bits 5-4 = 01 → 0b11_01_11_11 = 0xDF
+        nm.inject_message(make_dm13(0xDF, 0xFFFF));
+        CHECK(!diag.is_dm1_suspended());
+    }
+}

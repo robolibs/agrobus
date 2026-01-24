@@ -280,6 +280,10 @@ namespace isobus {
             bool auto_send_ = false;
             bool dm1_suspended_ = false;
             bool dm2_suspended_ = false;
+            // DM13 suspend duration tracking (ISO 11783-12 / J1939-73)
+            // 0xFFFF = indefinite, otherwise duration in seconds
+            u32 dm1_suspend_remaining_ms_ = 0;
+            u32 dm2_suspend_remaining_ms_ = 0;
             dp::Optional<ProductIdentification> product_id_;
             dp::Optional<SoftwareIdentification> software_id_;
             DiagnosticProtocolID diag_protocol_id_; // DM5: supported protocols
@@ -383,6 +387,10 @@ namespace isobus {
             dp::Vector<DTC> active_dtcs() const { return active_dtcs_; }
             dp::Vector<DTC> previous_dtcs() const { return previous_dtcs_; }
 
+            // ─── Suspend state access ─────────────────────────────────────────────────
+            bool is_dm1_suspended() const noexcept { return dm1_suspended_; }
+            bool is_dm2_suspended() const noexcept { return dm2_suspended_; }
+
             // ─── Lamp control ────────────────────────────────────────────────────────
             void set_lamps(DiagnosticLamps lamps) { lamps_ = lamps; }
             DiagnosticLamps lamps() const noexcept { return lamps_; }
@@ -402,6 +410,26 @@ namespace isobus {
             }
 
             void update(u32 elapsed_ms) {
+                // DM13 suspend duration tracking: auto-resume when timer expires
+                if (dm1_suspended_ && dm1_suspend_remaining_ms_ > 0) {
+                    if (elapsed_ms >= dm1_suspend_remaining_ms_) {
+                        dm1_suspend_remaining_ms_ = 0;
+                        dm1_suspended_ = false;
+                        echo::category("isobus.diagnostic").info("DM1 suspend duration expired, resuming");
+                    } else {
+                        dm1_suspend_remaining_ms_ -= elapsed_ms;
+                    }
+                }
+                if (dm2_suspended_ && dm2_suspend_remaining_ms_ > 0) {
+                    if (elapsed_ms >= dm2_suspend_remaining_ms_) {
+                        dm2_suspend_remaining_ms_ = 0;
+                        dm2_suspended_ = false;
+                        echo::category("isobus.diagnostic").info("DM2 suspend duration expired, resuming");
+                    } else {
+                        dm2_suspend_remaining_ms_ -= elapsed_ms;
+                    }
+                }
+
                 if (auto_send_ && !dm1_suspended_) {
                     dm1_timer_ms_ += elapsed_ms;
                     if (dm1_timer_ms_ >= dm1_interval_ms_) {
@@ -604,18 +632,29 @@ namespace isobus {
                 signals.hold_signal = static_cast<DM13Command>((msg.data[0] >> 6) & 0x03);
                 signals.suspend_duration_s = static_cast<u16>(msg.data[2]) | (static_cast<u16>(msg.data[3]) << 8);
 
-                // Apply suspend/resume
+                // Apply suspend/resume with duration tracking
                 if (signals.dm1_signal == DM13Command::SuspendBroadcast) {
                     dm1_suspended_ = true;
-                    echo::category("isobus.diagnostic").info("DM1 broadcast suspended by ", msg.source);
+                    // 0xFFFF = indefinite (no auto-resume), otherwise convert seconds to ms
+                    dm1_suspend_remaining_ms_ = (signals.suspend_duration_s == 0xFFFF)
+                                                    ? 0
+                                                    : static_cast<u32>(signals.suspend_duration_s) * 1000;
+                    echo::category("isobus.diagnostic")
+                        .info("DM1 broadcast suspended by ", msg.source,
+                              " duration=", signals.suspend_duration_s == 0xFFFF ? "indefinite" : "finite");
                 } else if (signals.dm1_signal == DM13Command::ResumeBroadcast) {
                     dm1_suspended_ = false;
+                    dm1_suspend_remaining_ms_ = 0;
                     echo::category("isobus.diagnostic").info("DM1 broadcast resumed by ", msg.source);
                 }
                 if (signals.dm2_signal == DM13Command::SuspendBroadcast) {
                     dm2_suspended_ = true;
+                    dm2_suspend_remaining_ms_ = (signals.suspend_duration_s == 0xFFFF)
+                                                    ? 0
+                                                    : static_cast<u32>(signals.suspend_duration_s) * 1000;
                 } else if (signals.dm2_signal == DM13Command::ResumeBroadcast) {
                     dm2_suspended_ = false;
+                    dm2_suspend_remaining_ms_ = 0;
                 }
 
                 on_dm13_received.emit(signals, msg.source);

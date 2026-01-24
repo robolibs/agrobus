@@ -30,6 +30,12 @@ namespace isobus {
             dp::Vector<Name> members_;                       // member NAMEs (excluding master)
             dp::Map<Address, dp::Vector<Name>> remote_sets_; // remote working sets
 
+            // ISO 11783-7 Section 10.2: 100ms minimum between member messages
+            static constexpr u32 MEMBER_MSG_INTERVAL_MS = 100;
+            dp::Vector<Name> pending_members_; // queued member messages to send
+            u32 member_timer_ms_ = 0;
+            bool broadcasting_ = false;
+
           public:
             WorkingSetManager(NetworkManager &net, InternalCF *cf) : net_(net), cf_(cf) {}
 
@@ -54,10 +60,9 @@ namespace isobus {
             usize set_size() const noexcept { return members_.size() + 1; } // +1 for master
 
             // ─── Broadcast working set ───────────────────────────────────────────────
-            // Call this periodically (or on network join) to announce the working set.
-            // Sends master message (set size) followed by member messages at 100ms intervals.
-            // Per ISO 11783-7 Section 10.2: Master message defines set size,
-            // member messages identify each member by NAME.
+            // Call this to announce the working set. Sends the master message immediately,
+            // then queues member messages with 100ms spacing per ISO 11783-7 Section 10.2.
+            // Call update() periodically to send queued member messages.
             Result<void> broadcast_working_set() {
                 if (!cf_) {
                     return Result<void>::err(Error::invalid_state("control function not set"));
@@ -70,21 +75,46 @@ namespace isobus {
                 if (!result.is_ok())
                     return result;
 
-                // Send Working Set Member messages
-                for (const auto &member : members_) {
+                // Queue member messages for timed sending (100ms spacing)
+                pending_members_ = members_;
+                member_timer_ms_ = 0;
+                broadcasting_ = !pending_members_.empty();
+
+                echo::category("isobus.network.working_set")
+                    .debug("broadcast working set: size=", set_size(), " members queued=", pending_members_.size());
+                return {};
+            }
+
+            // ─── Periodic update ───────────────────────────────────────────────────────
+            // Sends queued member messages with 100ms spacing per ISO 11783-7 Section 10.2.
+            void update(u32 elapsed_ms) {
+                if (!broadcasting_ || pending_members_.empty())
+                    return;
+
+                member_timer_ms_ += elapsed_ms;
+                if (member_timer_ms_ >= MEMBER_MSG_INTERVAL_MS) {
+                    member_timer_ms_ -= MEMBER_MSG_INTERVAL_MS;
+
+                    // Send next member message
+                    const Name &member = pending_members_.front();
                     dp::Vector<u8> member_data(8, 0xFF);
                     auto mbytes = member.to_bytes();
                     for (usize i = 0; i < 8; ++i) {
                         member_data[i] = mbytes[i];
                     }
-                    result = net_.send(PGN_WORKING_SET_MEMBER, member_data, cf_);
-                    if (!result.is_ok())
-                        return result;
-                }
+                    net_.send(PGN_WORKING_SET_MEMBER, member_data, cf_);
+                    echo::category("isobus.network.working_set")
+                        .debug("sent member message, remaining=", pending_members_.size() - 1);
 
-                echo::category("isobus.network.working_set").debug("broadcast working set: size=", set_size());
-                return {};
+                    pending_members_.erase(pending_members_.begin());
+                    if (pending_members_.empty()) {
+                        broadcasting_ = false;
+                        echo::category("isobus.network.working_set").debug("broadcast complete");
+                    }
+                }
             }
+
+            bool is_broadcasting() const noexcept { return broadcasting_; }
 
             // ─── Query remote working sets ───────────────────────────────────────────
             const dp::Map<Address, dp::Vector<Name>> &remote_sets() const noexcept { return remote_sets_; }
