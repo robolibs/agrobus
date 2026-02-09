@@ -38,7 +38,9 @@ namespace agrobus::isobus::vt {
     struct LanguageCode {
         char code[2] = {'e', 'n'}; // Default: English
 
-        bool operator==(const LanguageCode &other) const { return code[0] == other.code[0] && code[1] == other.code[1]; }
+        bool operator==(const LanguageCode &other) const {
+            return code[0] == other.code[0] && code[1] == other.code[1];
+        }
         bool operator!=(const LanguageCode &other) const { return !(*this == other); }
 
         static LanguageCode from_string(const dp::String &str) {
@@ -918,10 +920,8 @@ namespace agrobus::isobus::vt {
 
             if (current_language_ != vt_language_) {
                 echo::category("isobus.vt.client")
-                    .warn("Language mismatch detected: client=",
-                          current_language_.to_string(),
-                          " vt=",
-                          vt_language_.to_string());
+                    .warn("Language mismatch detected: client=", current_language_.to_string(),
+                          " vt=", vt_language_.to_string());
 
                 // Update client language to match VT
                 LanguageCode old_lang = current_language_;

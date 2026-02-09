@@ -33,7 +33,7 @@ int main() {
         0, 0x28).value();
 
     // Setup file server
-    FileServer server(nm, cf, FileServerConfig{}.path("/isobus/data"));
+    fs::FileServerEnhanced server(nm, cf, fs::FileServerConfig{}.path("/isobus/data"));
     server.initialize();
     server.add_file("task_data.xml");
     server.add_file("prescription_01.bin");
@@ -55,7 +55,7 @@ int main() {
     }
 
     // Setup file client
-    FileClient client(nm, cf);
+    fs::FileClient client(nm, cf);
     client.initialize();
 
     client.on_file_opened.subscribe([](u8 handle) {

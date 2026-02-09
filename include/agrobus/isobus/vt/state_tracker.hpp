@@ -22,8 +22,8 @@ namespace agrobus::isobus::vt {
 
     // ─── Alarm Priority Levels ──────────────────────────────────────────────────
     enum class AlarmPriority : u8 {
-        Critical = 0,  // Highest priority
-        Warning = 1,   // Medium priority
+        Critical = 0,   // Highest priority
+        Warning = 1,    // Medium priority
         Information = 2 // Lowest priority
     };
 
@@ -66,7 +66,7 @@ namespace agrobus::isobus::vt {
         dp::Map<ObjectID, ObjectID> soft_key_mask_assignments_; // data mask -> soft key mask
 
         // ─── Alarm Priority Stack ─────────────────────────────────────────────────
-        dp::Vector<AlarmEntry> active_alarms_; // Sorted by priority (highest first)
+        dp::Vector<AlarmEntry> active_alarms_;              // Sorted by priority (highest first)
         dp::Map<ObjectID, AlarmPriority> alarm_priorities_; // Cached priorities from pool
 
         u8 vt_busy_code_ = 0;

@@ -50,9 +50,9 @@ int main() {
     diag.set_product_id(product);
 
     SoftwareIdentification software;
-    software.software_id_fields.push_back("Firmware:1.2.3");
-    software.software_id_fields.push_back("Application:2.0.1");
-    software.software_id_fields.push_back("Calibration:CAL-456");
+    software.versions.push_back("Firmware:1.2.3");
+    software.versions.push_back("Application:2.0.1");
+    software.versions.push_back("Calibration:CAL-456");
     diag.set_software_id(software);
 
     echo::info("Product ID: ", product.make, " ", product.model);

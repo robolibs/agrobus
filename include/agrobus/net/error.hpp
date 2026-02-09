@@ -48,6 +48,9 @@ namespace agrobus::net {
         static Error invalid_state(dp::String msg = "") noexcept {
             return Error(ErrorCode::InvalidState, std::move(msg));
         }
+        static Error invalid_data(dp::String msg = "") noexcept {
+            return Error(ErrorCode::InvalidData, std::move(msg));
+        }
         static Error transport_aborted(dp::String msg = "") noexcept {
             return Error(ErrorCode::TransportAborted, std::move(msg));
         }

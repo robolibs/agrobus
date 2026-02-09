@@ -33,12 +33,7 @@ namespace agrobus::isobus::fs {
     };
 
     // ─── File Client State ───────────────────────────────────────────────────────
-    enum class ClientState {
-        Disconnected,
-        WaitingForStatus,
-        Connected,
-        Error
-    };
+    enum class ClientState { Disconnected, WaitingForStatus, Connected, Error };
 
     // ─── Open File Info ──────────────────────────────────────────────────────────
     struct OpenFileInfo {
@@ -51,11 +46,11 @@ namespace agrobus::isobus::fs {
 
     // ─── File Client Configuration ───────────────────────────────────────────────
     struct FileClientConfig {
-        u32 ccm_interval_ms = 2000;           // Send CCM every 2s
-        u32 request_timeout_ms = 6000;        // Request timeout (6s)
-        u32 server_status_timeout_ms = 6000;  // Server status timeout (6s)
-        u32 retry_delay_ms = 500;             // Delay before retry
-        u8 max_retries = 3;                   // Max request retries
+        u32 ccm_interval_ms = 2000;          // Send CCM every 2s
+        u32 request_timeout_ms = 6000;       // Request timeout (6s)
+        u32 server_status_timeout_ms = 6000; // Server status timeout (6s)
+        u32 retry_delay_ms = 500;            // Delay before retry
+        u8 max_retries_ = 3;                 // Max request retries
 
         FileClientConfig &ccm_interval(u32 ms) {
             ccm_interval_ms = ms;
@@ -68,7 +63,7 @@ namespace agrobus::isobus::fs {
         }
 
         FileClientConfig &max_retries(u8 n) {
-            max_retries = n;
+            max_retries_ = n;
             return *this;
         }
     };
@@ -101,8 +96,7 @@ namespace agrobus::isobus::fs {
         dp::String current_directory_ = "\\";
 
       public:
-        FileClient(IsoNet &net, InternalCF *cf, FileClientConfig config = {})
-            : net_(net), cf_(cf), config_(config) {}
+        FileClient(IsoNet &net, InternalCF *cf, FileClientConfig config = {}) : net_(net), cf_(cf), config_(config) {}
 
         // ─── Initialization ──────────────────────────────────────────────────────
         Result<void> initialize() {
@@ -112,7 +106,7 @@ namespace agrobus::isobus::fs {
 
             // Register for server responses
             net_.register_pgn_callback(PGN_FILE_SERVER_TO_CLIENT,
-                [this](const Message &msg) { handle_server_response(msg); });
+                                       [this](const Message &msg) { handle_server_response(msg); });
 
             echo::category("isobus.fs.client").info("File client initialized");
             return {};
@@ -158,15 +152,12 @@ namespace agrobus::isobus::fs {
             on_disconnected.emit();
         }
 
-        bool is_connected() const {
-            return state_ == ClientState::Connected;
-        }
+        bool is_connected() const { return state_ == ClientState::Connected; }
 
         ClientState get_state() const { return state_; }
 
         // ─── File Operations ─────────────────────────────────────────────────────
-        void open_file(const dp::String &path, OpenFlags flags,
-                      std::function<void(Result<FileHandle>)> callback) {
+        void open_file(const dp::String &path, OpenFlags flags, std::function<void(Result<FileHandle>)> callback) {
 
             if (!is_connected()) {
                 callback(Result<FileHandle>::err(Error::invalid_state("not connected")));
@@ -188,9 +179,9 @@ namespace agrobus::isobus::fs {
 
             // Send request and register callback
             send_request(tan, FSFunction::OpenFile, request,
-                [this, path, flags, callback](const dp::Vector<u8> &response) {
-                    handle_open_response(path, flags, response, callback);
-                });
+                         [this, path, flags, callback](const dp::Vector<u8> &response) {
+                             handle_open_response(path, flags, response, callback);
+                         });
 
             echo::category("isobus.fs.client").debug("Open file request: ", path);
         }
@@ -209,15 +200,12 @@ namespace agrobus::isobus::fs {
             request[2] = handle;
 
             send_request(tan, FSFunction::CloseFile, request,
-                [this, handle](const dp::Vector<u8> &response) {
-                    handle_close_response(handle, response);
-                });
+                         [this, handle](const dp::Vector<u8> &response) { handle_close_response(handle, response); });
 
             echo::category("isobus.fs.client").debug("Close file request: handle=", static_cast<u32>(handle));
         }
 
-        void read_file(FileHandle handle, u8 count,
-                      std::function<void(Result<dp::Vector<u8>>)> callback) {
+        void read_file(FileHandle handle, u8 count, std::function<void(Result<dp::Vector<u8>>)> callback) {
 
             if (!open_files_.count(handle)) {
                 callback(Result<dp::Vector<u8>>::err(Error::invalid_state("invalid handle")));
@@ -232,18 +220,15 @@ namespace agrobus::isobus::fs {
             request[2] = handle;
             request[3] = count;
 
-            send_request(tan, FSFunction::ReadFile, request,
-                [this, handle, callback](const dp::Vector<u8> &response) {
-                    handle_read_response(handle, response, callback);
-                });
+            send_request(tan, FSFunction::ReadFile, request, [this, handle, callback](const dp::Vector<u8> &response) {
+                handle_read_response(handle, response, callback);
+            });
 
-            echo::category("isobus.fs.client").trace(
-                "Read file request: handle=", static_cast<u32>(handle), " count=", static_cast<u32>(count)
-            );
+            echo::category("isobus.fs.client")
+                .trace("Read file request: handle=", static_cast<u32>(handle), " count=", static_cast<u32>(count));
         }
 
-        void write_file(FileHandle handle, const dp::Vector<u8> &data,
-                       std::function<void(Result<u8>)> callback) {
+        void write_file(FileHandle handle, const dp::Vector<u8> &data, std::function<void(Result<u8>)> callback) {
 
             if (!open_files_.count(handle)) {
                 callback(Result<u8>::err(Error::invalid_state("invalid handle")));
@@ -263,18 +248,15 @@ namespace agrobus::isobus::fs {
                 request[4 + i] = data[i];
             }
 
-            send_request(tan, FSFunction::WriteFile, request,
-                [this, handle, callback](const dp::Vector<u8> &response) {
-                    handle_write_response(handle, response, callback);
-                });
+            send_request(tan, FSFunction::WriteFile, request, [this, handle, callback](const dp::Vector<u8> &response) {
+                handle_write_response(handle, response, callback);
+            });
 
-            echo::category("isobus.fs.client").trace(
-                "Write file request: handle=", static_cast<u32>(handle), " bytes=", data.size()
-            );
+            echo::category("isobus.fs.client")
+                .trace("Write file request: handle=", static_cast<u32>(handle), " bytes=", data.size());
         }
 
-        void seek_file(FileHandle handle, u32 position,
-                      std::function<void(Result<void>)> callback) {
+        void seek_file(FileHandle handle, u32 position, std::function<void(Result<void>)> callback) {
 
             if (!open_files_.count(handle)) {
                 callback(Result<void>::err(Error::invalid_state("invalid handle")));
@@ -293,13 +275,12 @@ namespace agrobus::isobus::fs {
             request[6] = static_cast<u8>((position >> 24) & 0xFF);
 
             send_request(tan, FSFunction::SeekFile, request,
-                [this, handle, position, callback](const dp::Vector<u8> &response) {
-                    handle_seek_response(handle, position, response, callback);
-                });
+                         [this, handle, position, callback](const dp::Vector<u8> &response) {
+                             handle_seek_response(handle, position, response, callback);
+                         });
 
-            echo::category("isobus.fs.client").trace(
-                "Seek file request: handle=", static_cast<u32>(handle), " pos=", position
-            );
+            echo::category("isobus.fs.client")
+                .trace("Seek file request: handle=", static_cast<u32>(handle), " pos=", position);
         }
 
         // ─── Directory Operations ────────────────────────────────────────────────
@@ -315,13 +296,12 @@ namespace agrobus::isobus::fs {
             request[1] = tan;
 
             send_request(tan, FSFunction::GetCurrentDirectory, request,
-                [this, callback](const dp::Vector<u8> &response) {
-                    handle_get_directory_response(response, callback);
-                });
+                         [this, callback](const dp::Vector<u8> &response) {
+                             handle_get_directory_response(response, callback);
+                         });
         }
 
-        void change_directory(const dp::String &path,
-                            std::function<void(Result<void>)> callback) {
+        void change_directory(const dp::String &path, std::function<void(Result<void>)> callback) {
 
             if (!is_connected()) {
                 callback(Result<void>::err(Error::invalid_state("not connected")));
@@ -340,9 +320,9 @@ namespace agrobus::isobus::fs {
             }
 
             send_request(tan, FSFunction::ChangeDirectory, request,
-                [this, path, callback](const dp::Vector<u8> &response) {
-                    handle_change_directory_response(path, response, callback);
-                });
+                         [this, path, callback](const dp::Vector<u8> &response) {
+                             handle_change_directory_response(path, response, callback);
+                         });
 
             echo::category("isobus.fs.client").debug("Change directory request: ", path);
         }
@@ -355,18 +335,12 @@ namespace agrobus::isobus::fs {
             request[1] = tan;
 
             send_request(tan, FSFunction::GetFileServerProperties, request,
-                [this](const dp::Vector<u8> &response) {
-                    handle_properties_response(response);
-                });
+                         [this](const dp::Vector<u8> &response) { handle_properties_response(response); });
         }
 
-        dp::Optional<FileServerProperties> get_server_properties() const {
-            return server_properties_;
-        }
+        dp::Optional<FileServerProperties> get_server_properties() const { return server_properties_; }
 
-        dp::Optional<FileServerStatus> get_server_status() const {
-            return server_status_;
-        }
+        dp::Optional<FileServerStatus> get_server_status() const { return server_status_; }
 
         // ─── Events ──────────────────────────────────────────────────────────────
         Event<> on_connected;
@@ -405,7 +379,7 @@ namespace agrobus::isobus::fs {
         // ─── Message Handling ────────────────────────────────────────────────────
         void handle_server_response(const Message &msg) {
             if (msg.source != server_address_ && server_address_ != NULL_ADDRESS) {
-                return;  // Ignore messages from other servers
+                return; // Ignore messages from other servers
             }
 
             if (msg.data.size() < 2) {
@@ -438,27 +412,26 @@ namespace agrobus::isobus::fs {
         }
 
         void handle_status_broadcast(const dp::Vector<u8> &data) {
-            if (data.size() < 3) return;
+            if (data.size() < 3)
+                return;
 
             FSFunction function = static_cast<FSFunction>(data[0]);
 
             if (function == FSFunction::FileServerStatus) {
                 server_status_ = FileServerStatus::decode(data);
-                echo::category("isobus.fs.client").trace(
-                    "Server status: busy=", server_status_->busy,
-                    " open_files=", static_cast<u32>(server_status_->number_of_open_files)
-                );
+                echo::category("isobus.fs.client")
+                    .trace("Server status: busy=", server_status_->busy,
+                           " open_files=", static_cast<u32>(server_status_->number_of_open_files));
             } else if (function == FSFunction::VolumeStatus) {
                 VolumeState vol_state = static_cast<VolumeState>(data[2]);
-                echo::category("isobus.fs.client").info(
-                    "Volume status: ", static_cast<u32>(vol_state)
-                );
+                echo::category("isobus.fs.client").info("Volume status: ", static_cast<u32>(vol_state));
             }
         }
 
         // ─── Response Handlers ───────────────────────────────────────────────────
         void handle_properties_response(const dp::Vector<u8> &response) {
-            if (response.size() < 3) return;
+            if (response.size() < 3)
+                return;
 
             FSError error = static_cast<FSError>(response[2]);
             if (error != FSError::Success) {
@@ -475,9 +448,8 @@ namespace agrobus::isobus::fs {
             }
         }
 
-        void handle_open_response(const dp::String &path, OpenFlags flags,
-                                 const dp::Vector<u8> &response,
-                                 std::function<void(Result<FileHandle>)> callback) {
+        void handle_open_response(const dp::String &path, OpenFlags flags, const dp::Vector<u8> &response,
+                                  std::function<void(Result<FileHandle>)> callback) {
 
             if (response.size() < 4) {
                 callback(Result<FileHandle>::err(Error::invalid_state("malformed response")));
@@ -515,7 +487,7 @@ namespace agrobus::isobus::fs {
         }
 
         void handle_read_response(FileHandle handle, const dp::Vector<u8> &response,
-                                 std::function<void(Result<dp::Vector<u8>>)> callback) {
+                                  std::function<void(Result<dp::Vector<u8>>)> callback) {
 
             if (response.size() < 4) {
                 callback(Result<dp::Vector<u8>>::err(Error::invalid_state("malformed response")));
@@ -524,7 +496,7 @@ namespace agrobus::isobus::fs {
 
             FSError error = static_cast<FSError>(response[2]);
             if (error != FSError::Success) {
-                if (error == FSError::EOF) {
+                if (error == FSError::EndOfFile) {
                     // EOF is not an error, return empty data
                     callback(Result<dp::Vector<u8>>::ok(dp::Vector<u8>()));
                 } else {
@@ -551,7 +523,7 @@ namespace agrobus::isobus::fs {
         }
 
         void handle_write_response(FileHandle handle, const dp::Vector<u8> &response,
-                                  std::function<void(Result<u8>)> callback) {
+                                   std::function<void(Result<u8>)> callback) {
 
             if (response.size() < 4) {
                 callback(Result<u8>::err(Error::invalid_state("malformed response")));
@@ -577,7 +549,7 @@ namespace agrobus::isobus::fs {
         }
 
         void handle_seek_response(FileHandle handle, u32 position, const dp::Vector<u8> &response,
-                                 std::function<void(Result<void>)> callback) {
+                                  std::function<void(Result<void>)> callback) {
 
             if (response.size() < 3) {
                 callback(Result<void>::err(Error::invalid_state("malformed response")));
@@ -601,7 +573,7 @@ namespace agrobus::isobus::fs {
         }
 
         void handle_get_directory_response(const dp::Vector<u8> &response,
-                                          std::function<void(Result<dp::String>)> callback) {
+                                           std::function<void(Result<dp::String>)> callback) {
 
             if (response.size() < 4) {
                 callback(Result<dp::String>::err(Error::invalid_state("malformed response")));
@@ -626,7 +598,7 @@ namespace agrobus::isobus::fs {
         }
 
         void handle_change_directory_response(const dp::String &path, const dp::Vector<u8> &response,
-                                             std::function<void(Result<void>)> callback) {
+                                              std::function<void(Result<void>)> callback) {
 
             if (response.size() < 3) {
                 callback(Result<void>::err(Error::invalid_state("malformed response")));
@@ -649,13 +621,13 @@ namespace agrobus::isobus::fs {
         TAN allocate_tan() {
             TAN tan = next_tan_++;
             if (next_tan_ == INVALID_TAN) {
-                next_tan_ = 0;  // Wrap around
+                next_tan_ = 0; // Wrap around
             }
             return tan;
         }
 
         void send_request(TAN tan, FSFunction function, const dp::Vector<u8> &request,
-                         std::function<void(const dp::Vector<u8> &)> callback) {
+                          std::function<void(const dp::Vector<u8> &)> callback) {
 
             // Store pending request
             PendingRequest pending;
@@ -666,8 +638,8 @@ namespace agrobus::isobus::fs {
             pending.callback = callback;
             pending_requests_[tan] = pending;
 
-            // Send to server
-            net_.send(PGN_FILE_CLIENT_TO_SERVER, request, cf_, server_address_);
+            // Send to server (broadcast to all file servers)
+            net_.send(PGN_FILE_CLIENT_TO_SERVER, request, cf_);
         }
 
         void send_ccm() {
@@ -676,9 +648,9 @@ namespace agrobus::isobus::fs {
             ccm.tan = allocate_tan();
 
             auto data = ccm.encode();
-            data[0] = 0xFF;  // Special CCM function code
+            data[0] = 0xFF; // Special CCM function code
 
-            net_.send(PGN_FILE_CLIENT_TO_SERVER, data, cf_, server_address_);
+            net_.send(PGN_FILE_CLIENT_TO_SERVER, data, cf_);
 
             echo::category("isobus.fs.client").trace("CCM sent, TAN=", static_cast<u32>(ccm.tan));
         }
@@ -693,9 +665,7 @@ namespace agrobus::isobus::fs {
             }
 
             for (TAN tan : expired) {
-                echo::category("isobus.fs.client").warn(
-                    "Request timeout: TAN=", static_cast<u32>(tan)
-                );
+                echo::category("isobus.fs.client").warn("Request timeout: TAN=", static_cast<u32>(tan));
 
                 // TODO: Implement retry logic
                 pending_requests_.erase(tan);

@@ -11,6 +11,7 @@
 #include <agrobus/net/types.hpp>
 #include <datapod/datapod.hpp>
 #include <echo/echo.hpp>
+#include <functional>
 
 namespace agrobus::net {
 
@@ -32,15 +33,14 @@ namespace agrobus::net {
         dp::Optional<Name> destination_name; // filter by destination NAME
 
         // Rate limiting (optional)
-        u32 max_frequency_ms = 0; // 0 = no limit, otherwise minimum interval between forwards
+        u32 max_frequency_ms = 0;  // 0 = no limit, otherwise minimum interval between forwards
         u32 last_forward_time = 0; // internal tracking
 
         // Persistence
         bool persistent = false; // whether this rule survives NIU reset
 
         FilterRule() = default;
-        FilterRule(PGN p, ForwardPolicy pol, bool bidir = true)
-            : pgn(p), policy(pol), bidirectional(bidir) {}
+        FilterRule(PGN p, ForwardPolicy pol, bool bidir = true) : pgn(p), policy(pol), bidirectional(bidir) {}
 
         // Encode for persistence (18 bytes)
         dp::Vector<u8> encode() const {
@@ -63,7 +63,7 @@ namespace agrobus::net {
             data.push_back(flags);
             // Source NAME (8 bytes)
             if (source_name.has_value()) {
-                u64 name_val = source_name.value().value();
+                u64 name_val = source_name.value().raw;
                 for (int i = 0; i < 8; ++i) {
                     data.push_back(static_cast<u8>((name_val >> (i * 8)) & 0xFF));
                 }
@@ -73,7 +73,7 @@ namespace agrobus::net {
             }
             // Destination NAME (8 bytes)
             if (destination_name.has_value()) {
-                u64 name_val = destination_name.value().value();
+                u64 name_val = destination_name.value().raw;
                 for (int i = 0; i < 8; ++i) {
                     data.push_back(static_cast<u8>((name_val >> (i * 8)) & 0xFF));
                 }
@@ -90,12 +90,12 @@ namespace agrobus::net {
         // Decode from persistence
         static Result<FilterRule> decode(const dp::Vector<u8> &data) {
             if (data.size() < 22) {
-                return Result<FilterRule>::err(Error::invalid_argument("filter rule too short"));
+                return Result<FilterRule>::err(Error::invalid_data("filter rule too short"));
             }
             FilterRule rule;
             // PGN
-            rule.pgn = static_cast<PGN>(data[0]) | (static_cast<PGN>(data[1]) << 8) |
-                       (static_cast<PGN>(data[2] & 0x03) << 16);
+            rule.pgn =
+                static_cast<PGN>(data[0]) | (static_cast<PGN>(data[1]) << 8) | (static_cast<PGN>(data[2] & 0x03) << 16);
             // Flags
             u8 flags = data[3];
             rule.policy = static_cast<ForwardPolicy>(flags & 0x03);
@@ -228,10 +228,10 @@ namespace agrobus::net {
     // ─── NIU configuration ───────────────────────────────────────────────────────
     struct NIUConfig {
         dp::String name = "NIU";
-        bool forward_global_by_default = true;   // forward broadcast PGNs not in filter
-        bool forward_specific_by_default = true; // forward destination-specific PGNs not in filter
+        bool forward_global_by_default = true;              // forward broadcast PGNs not in filter
+        bool forward_specific_by_default = true;            // forward destination-specific PGNs not in filter
         NIUFilterMode filter_mode = NIUFilterMode::PassAll; // default filter mode
-        dp::String persistence_file; // file path for persistent filter database
+        dp::String persistence_file;                        // file path for persistent filter database
 
         NIUConfig &set_name(dp::String n) {
             name = std::move(n);
@@ -258,6 +258,7 @@ namespace agrobus::net {
     // ─── Network Interconnect Unit (ISO 11783-4) ─────────────────────────────────
     // Routes CAN frames between tractor-side and implement-side networks.
     class NIU {
+      protected:
         IsoNet *tractor_net_ = nullptr;
         IsoNet *implement_net_ = nullptr;
         dp::Vector<FilterRule> filters_;
@@ -457,7 +458,7 @@ namespace agrobus::net {
         Event<Frame, Side> on_monitored;              // frame forwarded but also reported
         Event<NIUNetworkMsg, Address> on_niu_message; // NIU protocol messages
 
-      private:
+      protected:
         void process_frame(const Frame &frame, Side origin) {
             if (!state_.is(NIUState::Active)) {
                 return;
@@ -505,8 +506,8 @@ namespace agrobus::net {
         }
 
         // Returns (policy, rate_limited)
-        dp::Pair<ForwardPolicy, bool> resolve_policy_ex(PGN pgn, Address source, Address destination,
-                                                        bool is_broadcast, Side origin) {
+        dp::Pair<ForwardPolicy, bool> resolve_policy_ex(PGN pgn, Address source, Address destination, bool is_broadcast,
+                                                        Side origin) {
             u32 now = 0; // would use actual timestamp in production
 
             // Search filters for matching rules
@@ -627,9 +628,9 @@ namespace agrobus::net {
 
         // ─── Initialize bridge ───────────────────────────────────────────────────
         Result<void> initialize() {
-            echo::category("isobus.niu.bridge").info("Bridge NIU initialized with filter mode ",
-                                                     config_.filter_mode == NIUFilterMode::PassAll ? "PassAll"
-                                                                                                   : "BlockAll");
+            echo::category("isobus.niu.bridge")
+                .info("Bridge NIU initialized with filter mode ",
+                      config_.filter_mode == NIUFilterMode::PassAll ? "PassAll" : "BlockAll");
             return start();
         }
 
@@ -637,8 +638,8 @@ namespace agrobus::net {
         // Track which addresses are on which side to avoid unnecessary forwarding
         void learn_address(Address addr, Side side) {
             address_table_[addr] = side;
-            echo::category("isobus.niu.bridge").debug("learned address ", addr, " on ",
-                                                      side == Side::Tractor ? "tractor" : "implement");
+            echo::category("isobus.niu.bridge")
+                .debug("learned address ", addr, " on ", side == Side::Tractor ? "tractor" : "implement");
         }
 
         dp::Optional<Side> lookup_address(Address addr) const {
@@ -677,7 +678,7 @@ namespace agrobus::net {
             if (from_side == Side::Implement && addr == implement_address) {
                 return tractor_address;
             }
-            return INVALID_ADDRESS; // No translation
+            return NULL_ADDRESS; // No translation
         }
     };
 
@@ -715,11 +716,11 @@ namespace agrobus::net {
                 if (!t.active)
                     continue;
                 Address result = t.translate(addr, from_side);
-                if (result != INVALID_ADDRESS) {
+                if (result != NULL_ADDRESS) {
                     return result;
                 }
             }
-            return INVALID_ADDRESS;
+            return NULL_ADDRESS;
         }
 
         // ─── Lookup by address ───────────────────────────────────────────────────
@@ -801,12 +802,12 @@ namespace agrobus::net {
         void add_translation(Name name, Address tractor_addr, Address implement_addr) {
             translation_db_.add(name, tractor_addr, implement_addr);
             echo::category("isobus.niu.router")
-                .info("added translation: NAME=", name.value(), " tractor=", tractor_addr, " implement=", implement_addr);
+                .info("added translation: NAME=", name.raw, " tractor=", tractor_addr, " implement=", implement_addr);
         }
 
         void remove_translation(Name name) {
             translation_db_.remove(name);
-            echo::category("isobus.niu.router").info("removed translation for NAME=", name.value());
+            echo::category("isobus.niu.router").info("removed translation for NAME=", name.raw);
         }
 
         const AddressTranslationDB &translation_db() const noexcept { return translation_db_; }
@@ -816,7 +817,7 @@ namespace agrobus::net {
 
         void process_implement_frame(const Frame &frame) { process_and_translate(frame, Side::Implement); }
 
-      private:
+      protected:
         void process_and_translate(const Frame &frame, Side origin) {
             if (!state_.is(NIUState::Active)) {
                 return;
@@ -837,11 +838,11 @@ namespace agrobus::net {
 
             // Perform address translation
             Address translated_source = translation_db_.translate(source, origin);
-            Address translated_dest = INVALID_ADDRESS;
+            Address translated_dest = NULL_ADDRESS;
 
             if (!frame.is_broadcast()) {
                 translated_dest = translation_db_.translate(destination, origin);
-                if (translated_dest == INVALID_ADDRESS) {
+                if (translated_dest == NULL_ADDRESS) {
                     // Destination not in translation table - block
                     ++blocked_count_;
                     on_blocked.emit(frame, origin);
@@ -851,18 +852,19 @@ namespace agrobus::net {
                 }
             }
 
-            if (translated_source == INVALID_ADDRESS) {
+            if (translated_source == NULL_ADDRESS) {
                 // Source not in translation table - forward without translation
-                echo::category("isobus.niu.router")
-                    .debug("no translation for source ", source, " - forwarding as-is");
+                echo::category("isobus.niu.router").debug("no translation for source ", source, " - forwarding as-is");
                 forward(frame, origin);
             } else {
-                // Create translated frame
+                // Create translated frame with new identifier
+                Address new_source = translated_source;
+                Address new_dest =
+                    (!frame.is_broadcast() && translated_dest != NULL_ADDRESS) ? translated_dest : destination;
+                Identifier new_id = Identifier::encode(frame.priority(), frame.pgn(), new_source, new_dest);
+
                 Frame translated_frame = frame;
-                translated_frame.set_source(translated_source);
-                if (!frame.is_broadcast() && translated_dest != INVALID_ADDRESS) {
-                    translated_frame.set_destination(translated_dest);
-                }
+                translated_frame.id = new_id;
 
                 forward(translated_frame, origin);
                 echo::category("isobus.niu.router")
@@ -897,7 +899,7 @@ namespace agrobus::net {
     // - Data unit conversion (imperial <-> metric)
     // - Custom message transformations
     //
-    using MessageTransformFn = dp::Function<dp::Optional<Message>(const Message &)>;
+    using MessageTransformFn = std::function<dp::Optional<Message>(const Message &)>;
 
     class GatewayNIU : public RouterNIU {
         dp::Map<PGN, MessageTransformFn> tractor_transforms_;   // Tractor->Implement transforms
@@ -956,28 +958,32 @@ namespace agrobus::net {
             // Check for message transform
             auto transform_it = transforms.find(pgn);
             if (transform_it != transforms.end()) {
-                // Apply message transformation
-                Message msg = Message::from_frame(frame);
+                // Apply message transformation - convert Frame to Message
+                dp::Vector<u8> msg_data(frame.data.begin(), frame.data.begin() + frame.length);
+                Message msg(pgn, msg_data, source, destination, frame.priority());
+                msg.timestamp_us = frame.timestamp_us;
+
                 auto transformed = transform_it->second(msg);
 
                 if (transformed.has_value()) {
-                    // Create frame from transformed message
-                    Frame transformed_frame = transformed.value().to_frame();
+                    const Message &tmsg = transformed.value();
 
                     // Still need address translation
                     Address translated_source = translation_db().translate(source, origin);
-                    Address translated_dest = INVALID_ADDRESS;
+                    Address translated_dest = NULL_ADDRESS;
 
-                    if (!transformed_frame.is_broadcast()) {
+                    if (!tmsg.is_broadcast()) {
                         translated_dest = translation_db().translate(destination, origin);
                     }
 
-                    if (translated_source != INVALID_ADDRESS) {
-                        transformed_frame.set_source(translated_source);
-                    }
-                    if (translated_dest != INVALID_ADDRESS) {
-                        transformed_frame.set_destination(translated_dest);
-                    }
+                    // Use translated addresses if available, otherwise use original
+                    Address final_source = (translated_source != NULL_ADDRESS) ? translated_source : tmsg.source;
+                    Address final_dest = (translated_dest != NULL_ADDRESS) ? translated_dest : tmsg.destination;
+
+                    // Create frame from transformed message
+                    Frame transformed_frame =
+                        Frame::from_message(tmsg.priority, tmsg.pgn, final_source, final_dest, tmsg.data.data(),
+                                            static_cast<u8>(tmsg.data.size() > 8 ? 8 : tmsg.data.size()));
 
                     forward(transformed_frame, origin);
                     echo::category("isobus.niu.gateway").debug("repackaged and forwarded PGN ", pgn);

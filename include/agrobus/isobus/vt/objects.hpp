@@ -166,28 +166,50 @@ namespace agrobus::isobus::vt {
         // Returns 0 for unknown/variable-length commands
         static u16 get_command_length(u8 cmd) {
             switch (cmd) {
-            case 0xA0: return 6;  // Hide/Show
-            case 0xA1: return 5;  // Enable/Disable
-            case 0xA2: return 2;  // Select Active Working Set
-            case 0xA3: return 4;  // Control Audio Signal
-            case 0xA4: return 8;  // Change Size
-            case 0xA5: return 4;  // Change Background Colour
-            case 0xA6: return 7;  // Change Child Location
-            case 0xA7: return 9;  // Change Child Position
-            case 0xA8: return 8;  // Change Numeric Value
-            case 0xA9: return 3;  // Set Audio Volume
-            case 0xAD: return 4;  // Change Active Mask
-            case 0xAE: return 5;  // Change Soft Key Mask
-            case 0xAF: return 8;  // Change Attribute
-            case 0xB0: return 6;  // Change List Item
-            case 0xB1: return 5;  // Change Fill Attributes
-            case 0xB2: return 5;  // Change Font Attributes
-            case 0xB3: return 0;  // Change String Value (variable length)
-            case 0xB4: return 4;  // Change Priority
-            case 0xB5: return 9;  // Change End Point
-            case 0xBD: return 5;  // Lock/Unlock Mask
-            case 0xBE: return 2;  // Execute Macro
-            default: return 0;    // Unknown or variable length
+            case 0xA0:
+                return 6; // Hide/Show
+            case 0xA1:
+                return 5; // Enable/Disable
+            case 0xA2:
+                return 2; // Select Active Working Set
+            case 0xA3:
+                return 4; // Control Audio Signal
+            case 0xA4:
+                return 8; // Change Size
+            case 0xA5:
+                return 4; // Change Background Colour
+            case 0xA6:
+                return 7; // Change Child Location
+            case 0xA7:
+                return 9; // Change Child Position
+            case 0xA8:
+                return 8; // Change Numeric Value
+            case 0xA9:
+                return 3; // Set Audio Volume
+            case 0xAD:
+                return 4; // Change Active Mask
+            case 0xAE:
+                return 5; // Change Soft Key Mask
+            case 0xAF:
+                return 8; // Change Attribute
+            case 0xB0:
+                return 6; // Change List Item
+            case 0xB1:
+                return 5; // Change Fill Attributes
+            case 0xB2:
+                return 5; // Change Font Attributes
+            case 0xB3:
+                return 0; // Change String Value (variable length)
+            case 0xB4:
+                return 4; // Change Priority
+            case 0xB5:
+                return 9; // Change End Point
+            case 0xBD:
+                return 5; // Lock/Unlock Mask
+            case 0xBE:
+                return 2; // Execute Macro
+            default:
+                return 0; // Unknown or variable length
             }
         }
     };
@@ -225,7 +247,8 @@ namespace agrobus::isobus::vt {
                     if (cmd.command_type == 0xB3) { // Change String Value
                         // Format: [cmd][obj_id_lo][obj_id_hi][len_lo][len_hi][string...]
                         if (offset + 4 > body.size())
-                            return Result<MacroBody>::err(Error::invalid_data("incomplete Change String Value in macro"));
+                            return Result<MacroBody>::err(
+                                Error::invalid_data("incomplete Change String Value in macro"));
                         u16 str_len = static_cast<u16>(body[offset + 2]) | (static_cast<u16>(body[offset + 3]) << 8);
                         u16 total_len = 4 + str_len;
                         if (offset + total_len > body.size())

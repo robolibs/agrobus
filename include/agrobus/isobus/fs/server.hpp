@@ -33,9 +33,7 @@ namespace agrobus::isobus::fs {
             return (current_time_ms - last_ccm_timestamp_ms) <= timeout_ms;
         }
 
-        void update_ccm(u32 current_time_ms) {
-            last_ccm_timestamp_ms = current_time_ms;
-        }
+        void update_ccm(u32 current_time_ms) { last_ccm_timestamp_ms = current_time_ms; }
     };
 
     // ─── Open file state ─────────────────────────────────────────────────────────
@@ -43,7 +41,7 @@ namespace agrobus::isobus::fs {
         FileHandle handle = INVALID_FILE_HANDLE;
         Address owner = NULL_ADDRESS;
         dp::String path;
-        dp::Vector<u8> *data = nullptr;  // Pointer to actual file data
+        dp::Vector<u8> *data = nullptr; // Pointer to actual file data
         u32 position = 0;
         OpenFlags flags = OpenFlags::Read;
         bool is_directory = false;
@@ -53,8 +51,8 @@ namespace agrobus::isobus::fs {
     struct FileServerConfig {
         u32 status_broadcast_interval_ms = 2000;
         u32 busy_status_interval_ms = 200;
-        u32 ccm_timeout_ms = 6000;  // 6 seconds without CCM = disconnect
-        u32 tan_cache_timeout_ms = 10000;  // TAN cache entry lifetime
+        u32 ccm_timeout_ms = 6000;        // 6 seconds without CCM = disconnect
+        u32 tan_cache_timeout_ms = 10000; // TAN cache entry lifetime
         u8 max_open_files_per_client = 8;
         u8 max_open_files_total = 32;
 
@@ -91,9 +89,9 @@ namespace agrobus::isobus::fs {
         FileServerConfig config_;
 
         // File system state
-        dp::Map<dp::String, dp::Vector<u8>> files_;  // path -> data
-        dp::Map<dp::String, FileAttributes> file_attrs_;  // path -> attributes
-        dp::Vector<dp::String> directories_;  // List of directories
+        dp::Map<dp::String, dp::Vector<u8>> files_;      // path -> data
+        dp::Map<dp::String, FileAttributes> file_attrs_; // path -> attributes
+        dp::Vector<dp::String> directories_;             // List of directories
         dp::Vector<OpenFile> open_files_;
         FileHandle next_handle_ = 1;
 
@@ -109,7 +107,7 @@ namespace agrobus::isobus::fs {
         StateMachine<VolumeState> volume_state_{VolumeState::Present};
         dp::String volume_name_ = "ISOBUS";
         u32 volume_removal_timer_ms_ = 0;
-        u32 volume_max_removal_time_ms_ = 10000;  // Max 10s for removal prep
+        u32 volume_max_removal_time_ms_ = 10000; // Max 10s for removal prep
         dp::Vector<Address> volume_maintain_requests_;
 
         // Properties
@@ -140,7 +138,7 @@ namespace agrobus::isobus::fs {
 
             // Register for client requests
             net_.register_pgn_callback(PGN_FILE_CLIENT_TO_SERVER,
-                [this](const Message &msg) { handle_client_message(msg); });
+                                       [this](const Message &msg) { handle_client_message(msg); });
 
             echo::category("isobus.fs.server").info("Enhanced file server initialized");
             return {};
@@ -175,7 +173,8 @@ namespace agrobus::isobus::fs {
 
         bool directory_exists(const dp::String &path) const {
             for (const auto &dir : directories_) {
-                if (dir == path) return true;
+                if (dir == path)
+                    return true;
             }
             return false;
         }
@@ -208,7 +207,8 @@ namespace agrobus::isobus::fs {
 
             // List subdirectories
             for (const auto &dir : directories_) {
-                if (dir == path) continue;  // Skip self
+                if (dir == path)
+                    continue; // Skip self
 
                 if (dir.find(path) == 0 && dir.size() > path.size()) {
                     auto subdir = dir.substr(path.size());
@@ -216,7 +216,7 @@ namespace agrobus::isobus::fs {
                     // Only include immediate subdirectories
                     auto next_slash = subdir.find('\\');
                     if (next_slash != dp::String::npos && next_slash < subdir.size() - 1) {
-                        continue;  // This is a nested subdirectory
+                        continue; // This is a nested subdirectory
                     }
 
                     FileEntry entry;
@@ -235,9 +235,7 @@ namespace agrobus::isobus::fs {
         // ─── Server Properties ───────────────────────────────────────────────────
         FileServerProperties get_properties() const { return properties_; }
 
-        void set_properties(FileServerProperties props) {
-            properties_ = props;
-        }
+        void set_properties(FileServerProperties props) { properties_ = props; }
 
         // ─── Volume Management ───────────────────────────────────────────────────
         VolumeState get_volume_state() const { return volume_state_.state(); }
@@ -251,10 +249,8 @@ namespace agrobus::isobus::fs {
                 volume_removal_timer_ms_ = 0;
                 volume_maintain_requests_.clear();
 
-                echo::category("isobus.fs.server").info(
-                    "Volume removal initiated, max time: ",
-                    volume_max_removal_time_ms_ / 1000, "s"
-                );
+                echo::category("isobus.fs.server")
+                    .info("Volume removal initiated, max time: ", volume_max_removal_time_ms_ / 1000, "s");
 
                 // Broadcast volume status change
                 broadcast_volume_status();
@@ -283,19 +279,15 @@ namespace agrobus::isobus::fs {
 
             if (!found) {
                 volume_maintain_requests_.push_back(client);
-                echo::category("isobus.fs.server").debug(
-                    "Volume maintain request from client ", client
-                );
+                echo::category("isobus.fs.server").debug("Volume maintain request from client ", client);
             }
         }
 
         // Client finished with volume
         void clear_volume_maintain_request(Address client) {
             volume_maintain_requests_.erase(
-                std::remove(volume_maintain_requests_.begin(),
-                          volume_maintain_requests_.end(), client),
-                volume_maintain_requests_.end()
-            );
+                std::remove(volume_maintain_requests_.begin(), volume_maintain_requests_.end(), client),
+                volume_maintain_requests_.end());
         }
 
         // Force volume to removed state
@@ -305,10 +297,8 @@ namespace agrobus::isobus::fs {
 
             // Close all open files
             for (auto &open_file : open_files_) {
-                echo::category("isobus.fs.server").debug(
-                    "Force-closing file handle ", static_cast<u32>(open_file.handle),
-                    " due to volume removal"
-                );
+                echo::category("isobus.fs.server")
+                    .debug("Force-closing file handle ", static_cast<u32>(open_file.handle), " due to volume removal");
             }
             open_files_.clear();
 
@@ -334,9 +324,7 @@ namespace agrobus::isobus::fs {
         }
 
         // ─── Busy State Control ──────────────────────────────────────────────────
-        void set_busy(bool busy) {
-            busy_ = busy;
-        }
+        void set_busy(bool busy) { busy_ = busy; }
 
         bool is_busy() const { return busy_; }
 
@@ -387,7 +375,7 @@ namespace agrobus::isobus::fs {
             client.client_address = msg.source;
 
             // Check for CCM (Client Connection Maintenance)
-            if (function == 0xFF) {  // Special CCM function code
+            if (function == 0xFF) { // Special CCM function code
                 handle_ccm(msg.source, tan);
                 return;
             }
@@ -396,9 +384,8 @@ namespace agrobus::isobus::fs {
             if (client.tan_cache.count(tan) > 0) {
                 // TAN match: resend cached response, don't re-execute
                 auto &cached = client.tan_cache[tan];
-                echo::category("isobus.fs.server").debug(
-                    "TAN cache hit for client ", msg.source, " TAN=", static_cast<u32>(tan)
-                );
+                echo::category("isobus.fs.server")
+                    .debug("TAN cache hit for client ", msg.source, " TAN=", static_cast<u32>(tan));
                 send_response(msg.source, cached.response_data);
                 return;
             }
@@ -436,57 +423,53 @@ namespace agrobus::isobus::fs {
             auto function = static_cast<FSFunction>(function_code);
 
             switch (function) {
-                case FSFunction::OpenFile:
-                    return handle_open_file(client, tan, request);
+            case FSFunction::OpenFile:
+                return handle_open_file(client, tan, request);
 
-                case FSFunction::CloseFile:
-                    return handle_close_file(client, tan, request);
+            case FSFunction::CloseFile:
+                return handle_close_file(client, tan, request);
 
-                case FSFunction::ReadFile:
-                    return handle_read_file(client, tan, request);
+            case FSFunction::ReadFile:
+                return handle_read_file(client, tan, request);
 
-                case FSFunction::WriteFile:
-                    return handle_write_file(client, tan, request);
+            case FSFunction::WriteFile:
+                return handle_write_file(client, tan, request);
 
-                case FSFunction::SeekFile:
-                    return handle_seek_file(client, tan, request);
+            case FSFunction::SeekFile:
+                return handle_seek_file(client, tan, request);
 
-                case FSFunction::GetFileServerProperties:
-                    return handle_get_properties(client, tan);
+            case FSFunction::GetFileServerProperties:
+                return handle_get_properties(client, tan);
 
-                case FSFunction::FileServerStatus:
-                    return handle_get_status(client, tan);
+            case FSFunction::FileServerStatus:
+                return handle_get_status(client, tan);
 
-                case FSFunction::GetCurrentDirectory:
-                    return handle_get_current_directory(client, tan);
+            case FSFunction::GetCurrentDirectory:
+                return handle_get_current_directory(client, tan);
 
-                case FSFunction::ChangeDirectory:
-                    return handle_change_directory(client, tan, request);
+            case FSFunction::ChangeDirectory:
+                return handle_change_directory(client, tan, request);
 
-                default:
-                    echo::category("isobus.fs.server").warn(
-                        "Unsupported function: ", static_cast<u32>(function_code)
-                    );
-                    return encode_error_response(function_code, tan, FSError::NotSupported);
+            default:
+                echo::category("isobus.fs.server").warn("Unsupported function: ", static_cast<u32>(function_code));
+                return encode_error_response(function_code, tan, FSError::NotSupported);
             }
         }
 
         // ─── Open File ───────────────────────────────────────────────────────────
         dp::Vector<u8> handle_open_file(Address client, TAN tan, const dp::Vector<u8> &request) {
             if (request.size() < 4) {
-                return encode_error_response(static_cast<u8>(FSFunction::OpenFile),
-                                             tan, FSError::MalformedRequest);
+                return encode_error_response(static_cast<u8>(FSFunction::OpenFile), tan, FSError::MalformedRequest);
             }
 
             u8 path_len = request[2];
             OpenFlags flags = static_cast<OpenFlags>(request[3]);
 
             if (request.size() < 4 + path_len) {
-                return encode_error_response(static_cast<u8>(FSFunction::OpenFile),
-                                             tan, FSError::MalformedRequest);
+                return encode_error_response(static_cast<u8>(FSFunction::OpenFile), tan, FSError::MalformedRequest);
             }
 
-            dp::String path(reinterpret_cast<const char*>(request.data() + 4), path_len);
+            dp::String path(reinterpret_cast<const char *>(request.data() + 4), path_len);
 
             // Check if opening a directory
             auto access_mode = get_access_mode(flags);
@@ -495,14 +478,12 @@ namespace agrobus::isobus::fs {
             // Check client file limit
             auto &conn = clients_[client];
             if (conn.open_handles.size() >= config_.max_open_files_per_client) {
-                return encode_error_response(static_cast<u8>(FSFunction::OpenFile),
-                                             tan, FSError::TooManyOpen);
+                return encode_error_response(static_cast<u8>(FSFunction::OpenFile), tan, FSError::TooManyOpen);
             }
 
             // Check total file limit
             if (open_files_.size() >= config_.max_open_files_total) {
-                return encode_error_response(static_cast<u8>(FSFunction::OpenFile),
-                                             tan, FSError::MaxHandles);
+                return encode_error_response(static_cast<u8>(FSFunction::OpenFile), tan, FSError::MaxHandles);
             }
 
             // Handle directory listing vs file open
@@ -514,15 +495,13 @@ namespace agrobus::isobus::fs {
                 }
 
                 if (!directory_exists(dir_path)) {
-                    return encode_error_response(static_cast<u8>(FSFunction::OpenFile),
-                                                 tan, FSError::NotFound);
+                    return encode_error_response(static_cast<u8>(FSFunction::OpenFile), tan, FSError::NotFound);
                 }
             } else {
                 // Check if file exists
                 if (files_.find(path) == files_.end()) {
                     if (!has_flag(flags, OpenFlags::Create)) {
-                        return encode_error_response(static_cast<u8>(FSFunction::OpenFile),
-                                                     tan, FSError::NotFound);
+                        return encode_error_response(static_cast<u8>(FSFunction::OpenFile), tan, FSError::NotFound);
                     }
 
                     // Create new file
@@ -534,8 +513,7 @@ namespace agrobus::isobus::fs {
             // Allocate handle
             FileHandle handle = allocate_handle();
             if (handle == INVALID_FILE_HANDLE) {
-                return encode_error_response(static_cast<u8>(FSFunction::OpenFile),
-                                             tan, FSError::MaxHandles);
+                return encode_error_response(static_cast<u8>(FSFunction::OpenFile), tan, FSError::MaxHandles);
             }
 
             // Create open file entry
@@ -551,9 +529,8 @@ namespace agrobus::isobus::fs {
 
             conn.open_handles.push_back(handle);
 
-            echo::category("isobus.fs.server").debug(
-                "File opened: ", path, " handle=", static_cast<u32>(handle), " client=", client
-            );
+            echo::category("isobus.fs.server")
+                .debug("File opened: ", path, " handle=", static_cast<u32>(handle), " client=", client);
 
             on_file_opened.emit(client, path);
 
@@ -569,8 +546,7 @@ namespace agrobus::isobus::fs {
         // ─── Close File ──────────────────────────────────────────────────────────
         dp::Vector<u8> handle_close_file(Address client, TAN tan, const dp::Vector<u8> &request) {
             if (request.size() < 3) {
-                return encode_error_response(static_cast<u8>(FSFunction::CloseFile),
-                                             tan, FSError::MalformedRequest);
+                return encode_error_response(static_cast<u8>(FSFunction::CloseFile), tan, FSError::MalformedRequest);
             }
 
             FileHandle handle = request[2];
@@ -580,14 +556,11 @@ namespace agrobus::isobus::fs {
                 if (it->handle == handle && it->owner == client) {
                     // Remove from client's handle list
                     auto &conn = clients_[client];
-                    conn.open_handles.erase(
-                        std::remove(conn.open_handles.begin(), conn.open_handles.end(), handle),
-                        conn.open_handles.end()
-                    );
+                    conn.open_handles.erase(std::remove(conn.open_handles.begin(), conn.open_handles.end(), handle),
+                                            conn.open_handles.end());
 
-                    echo::category("isobus.fs.server").debug(
-                        "File closed: ", it->path, " handle=", static_cast<u32>(handle)
-                    );
+                    echo::category("isobus.fs.server")
+                        .debug("File closed: ", it->path, " handle=", static_cast<u32>(handle));
 
                     on_file_closed.emit(client, handle);
 
@@ -602,37 +575,34 @@ namespace agrobus::isobus::fs {
                 }
             }
 
-            return encode_error_response(static_cast<u8>(FSFunction::CloseFile),
-                                         tan, FSError::InvalidHandle);
+            return encode_error_response(static_cast<u8>(FSFunction::CloseFile), tan, FSError::InvalidHandle);
         }
 
         // ─── Read File ───────────────────────────────────────────────────────────
         dp::Vector<u8> handle_read_file(Address client, TAN tan, const dp::Vector<u8> &request) {
             if (request.size() < 4) {
-                return encode_error_response(static_cast<u8>(FSFunction::ReadFile),
-                                             tan, FSError::MalformedRequest);
+                return encode_error_response(static_cast<u8>(FSFunction::ReadFile), tan, FSError::MalformedRequest);
             }
 
             FileHandle handle = request[2];
-            u8 count = request[3];  // Number of bytes to read
+            u8 count = request[3]; // Number of bytes to read
 
             // Find open file
             for (auto &open_file : open_files_) {
                 if (open_file.handle == handle && open_file.owner == client) {
                     if (open_file.data == nullptr) {
-                        return encode_error_response(static_cast<u8>(FSFunction::ReadFile),
-                                                     tan, FSError::InvalidHandle);
+                        return encode_error_response(static_cast<u8>(FSFunction::ReadFile), tan,
+                                                     FSError::InvalidHandle);
                     }
 
                     // Check EOF
                     if (open_file.position >= open_file.data->size()) {
-                        return encode_error_response(static_cast<u8>(FSFunction::ReadFile),
-                                                     tan, FSError::EOF);
+                        return encode_error_response(static_cast<u8>(FSFunction::ReadFile), tan, FSError::EndOfFile);
                     }
 
                     // Read data
                     u32 available = open_file.data->size() - open_file.position;
-                    u32 to_read = dp::min(static_cast<u32>(count), available);
+                    u32 to_read = std::min(static_cast<u32>(count), available);
 
                     dp::Vector<u8> response(8, 0xFF);
                     response[0] = static_cast<u8>(FSFunction::ReadFile);
@@ -647,46 +617,42 @@ namespace agrobus::isobus::fs {
 
                     open_file.position += to_read;
 
-                    echo::category("isobus.fs.server").trace(
-                        "Read ", to_read, " bytes from handle ", static_cast<u32>(handle)
-                    );
+                    echo::category("isobus.fs.server")
+                        .trace("Read ", to_read, " bytes from handle ", static_cast<u32>(handle));
 
                     return response;
                 }
             }
 
-            return encode_error_response(static_cast<u8>(FSFunction::ReadFile),
-                                         tan, FSError::InvalidHandle);
+            return encode_error_response(static_cast<u8>(FSFunction::ReadFile), tan, FSError::InvalidHandle);
         }
 
         // ─── Write File ──────────────────────────────────────────────────────────
         dp::Vector<u8> handle_write_file(Address client, TAN tan, const dp::Vector<u8> &request) {
             if (request.size() < 4) {
-                return encode_error_response(static_cast<u8>(FSFunction::WriteFile),
-                                             tan, FSError::MalformedRequest);
+                return encode_error_response(static_cast<u8>(FSFunction::WriteFile), tan, FSError::MalformedRequest);
             }
 
             FileHandle handle = request[2];
             u8 count = request[3];
 
             if (request.size() < 4 + count) {
-                return encode_error_response(static_cast<u8>(FSFunction::WriteFile),
-                                             tan, FSError::MalformedRequest);
+                return encode_error_response(static_cast<u8>(FSFunction::WriteFile), tan, FSError::MalformedRequest);
             }
 
             // Find open file
             for (auto &open_file : open_files_) {
                 if (open_file.handle == handle && open_file.owner == client) {
                     if (open_file.data == nullptr) {
-                        return encode_error_response(static_cast<u8>(FSFunction::WriteFile),
-                                                     tan, FSError::InvalidHandle);
+                        return encode_error_response(static_cast<u8>(FSFunction::WriteFile), tan,
+                                                     FSError::InvalidHandle);
                     }
 
                     // Check write permissions
                     auto mode = get_access_mode(open_file.flags);
                     if (mode != OpenFlags::Write && mode != OpenFlags::ReadWrite) {
-                        return encode_error_response(static_cast<u8>(FSFunction::WriteFile),
-                                                     tan, FSError::InvalidAccess);
+                        return encode_error_response(static_cast<u8>(FSFunction::WriteFile), tan,
+                                                     FSError::InvalidAccess);
                     }
 
                     // Write data
@@ -701,50 +667,44 @@ namespace agrobus::isobus::fs {
 
                     open_file.position += count;
 
-                    echo::category("isobus.fs.server").trace(
-                        "Wrote ", static_cast<u32>(count), " bytes to handle ", static_cast<u32>(handle)
-                    );
+                    echo::category("isobus.fs.server")
+                        .trace("Wrote ", static_cast<u32>(count), " bytes to handle ", static_cast<u32>(handle));
 
                     // Success response
                     dp::Vector<u8> response(8, 0xFF);
                     response[0] = static_cast<u8>(FSFunction::WriteFile);
                     response[1] = tan;
                     response[2] = static_cast<u8>(FSError::Success);
-                    response[3] = count;  // Bytes written
+                    response[3] = count; // Bytes written
                     return response;
                 }
             }
 
-            return encode_error_response(static_cast<u8>(FSFunction::WriteFile),
-                                         tan, FSError::InvalidHandle);
+            return encode_error_response(static_cast<u8>(FSFunction::WriteFile), tan, FSError::InvalidHandle);
         }
 
         // ─── Seek File ───────────────────────────────────────────────────────────
         dp::Vector<u8> handle_seek_file(Address client, TAN tan, const dp::Vector<u8> &request) {
             if (request.size() < 7) {
-                return encode_error_response(static_cast<u8>(FSFunction::SeekFile),
-                                             tan, FSError::MalformedRequest);
+                return encode_error_response(static_cast<u8>(FSFunction::SeekFile), tan, FSError::MalformedRequest);
             }
 
             FileHandle handle = request[2];
-            u32 position = static_cast<u32>(request[3]) |
-                          (static_cast<u32>(request[4]) << 8) |
-                          (static_cast<u32>(request[5]) << 16) |
-                          (static_cast<u32>(request[6]) << 24);
+            u32 position = static_cast<u32>(request[3]) | (static_cast<u32>(request[4]) << 8) |
+                           (static_cast<u32>(request[5]) << 16) | (static_cast<u32>(request[6]) << 24);
 
             // Find open file
             for (auto &open_file : open_files_) {
                 if (open_file.handle == handle && open_file.owner == client) {
                     if (open_file.data == nullptr) {
-                        return encode_error_response(static_cast<u8>(FSFunction::SeekFile),
-                                                     tan, FSError::InvalidHandle);
+                        return encode_error_response(static_cast<u8>(FSFunction::SeekFile), tan,
+                                                     FSError::InvalidHandle);
                     }
 
                     open_file.position = position;
 
-                    echo::category("isobus.fs.server").trace(
-                        "Seek handle ", static_cast<u32>(handle), " to position ", position
-                    );
+                    echo::category("isobus.fs.server")
+                        .trace("Seek handle ", static_cast<u32>(handle), " to position ", position);
 
                     // Success response
                     dp::Vector<u8> response(8, 0xFF);
@@ -755,8 +715,7 @@ namespace agrobus::isobus::fs {
                 }
             }
 
-            return encode_error_response(static_cast<u8>(FSFunction::SeekFile),
-                                         tan, FSError::InvalidHandle);
+            return encode_error_response(static_cast<u8>(FSFunction::SeekFile), tan, FSError::InvalidHandle);
         }
 
         // ─── Get Properties ──────────────────────────────────────────────────────
@@ -812,9 +771,7 @@ namespace agrobus::isobus::fs {
                 response[4 + i] = cwd[i];
             }
 
-            echo::category("isobus.fs.server").trace(
-                "Get current directory for client ", client, ": ", cwd
-            );
+            echo::category("isobus.fs.server").trace("Get current directory for client ", client, ": ", cwd);
 
             return response;
         }
@@ -822,17 +779,17 @@ namespace agrobus::isobus::fs {
         // ─── Change Directory ────────────────────────────────────────────────────
         dp::Vector<u8> handle_change_directory(Address client, TAN tan, const dp::Vector<u8> &request) {
             if (request.size() < 3) {
-                return encode_error_response(static_cast<u8>(FSFunction::ChangeDirectory),
-                                             tan, FSError::MalformedRequest);
+                return encode_error_response(static_cast<u8>(FSFunction::ChangeDirectory), tan,
+                                             FSError::MalformedRequest);
             }
 
             u8 path_len = request[2];
             if (request.size() < 3 + path_len) {
-                return encode_error_response(static_cast<u8>(FSFunction::ChangeDirectory),
-                                             tan, FSError::MalformedRequest);
+                return encode_error_response(static_cast<u8>(FSFunction::ChangeDirectory), tan,
+                                             FSError::MalformedRequest);
             }
 
-            dp::String path(reinterpret_cast<const char*>(request.data() + 3), path_len);
+            dp::String path(reinterpret_cast<const char *>(request.data() + 3), path_len);
 
             auto &conn = clients_[client];
 
@@ -875,16 +832,14 @@ namespace agrobus::isobus::fs {
 
                 // Check if directory exists
                 if (!directory_exists(target_path)) {
-                    return encode_error_response(static_cast<u8>(FSFunction::ChangeDirectory),
-                                                 tan, FSError::NotFound);
+                    return encode_error_response(static_cast<u8>(FSFunction::ChangeDirectory), tan, FSError::NotFound);
                 }
 
                 conn.current_directory = target_path;
             }
 
-            echo::category("isobus.fs.server").debug(
-                "Change directory for client ", client, " to: ", conn.current_directory
-            );
+            echo::category("isobus.fs.server")
+                .debug("Change directory for client ", client, " to: ", conn.current_directory);
 
             // Success response
             dp::Vector<u8> response(8, 0xFF);
@@ -930,17 +885,16 @@ namespace agrobus::isobus::fs {
             response[1] = tan;
             response[2] = static_cast<u8>(error);
 
-            echo::category("isobus.fs.server").debug(
-                "Error response: function=", static_cast<u32>(function),
-                " TAN=", static_cast<u32>(tan),
-                " error=", fs_error_to_string(error)
-            );
+            echo::category("isobus.fs.server")
+                .debug("Error response: function=", static_cast<u32>(function), " TAN=", static_cast<u32>(tan),
+                       " error=", fs_error_to_string(error));
 
             return response;
         }
 
         void send_response(Address client, const dp::Vector<u8> &data) {
-            net_.send(PGN_FILE_SERVER_TO_CLIENT, data, cf_, client);
+            // TODO: Look up client ControlFunction from address
+            net_.send(PGN_FILE_SERVER_TO_CLIENT, data, cf_);
         }
 
         void broadcast_status() {
@@ -983,7 +937,8 @@ namespace agrobus::isobus::fs {
             for (auto &[addr, client] : clients_) {
                 for (auto it = client.tan_cache.begin(); it != client.tan_cache.end();) {
                     if (it->second.is_expired(current_time_ms_, config_.tan_cache_timeout_ms)) {
-                        it = client.tan_cache.erase(it);
+                        client.tan_cache.erase(it->first);
+                        it = client.tan_cache.begin(); // Restart iteration
                     } else {
                         ++it;
                     }
@@ -999,10 +954,9 @@ namespace agrobus::isobus::fs {
                     // Close all client files
                     for (auto it = open_files_.begin(); it != open_files_.end();) {
                         if (it->owner == addr) {
-                            echo::category("isobus.fs.server").debug(
-                                "Auto-closing file handle ", static_cast<u32>(it->handle),
-                                " for disconnected client ", addr
-                            );
+                            echo::category("isobus.fs.server")
+                                .debug("Auto-closing file handle ", static_cast<u32>(it->handle),
+                                       " for disconnected client ", addr);
                             it = open_files_.erase(it);
                         } else {
                             ++it;
@@ -1025,59 +979,56 @@ namespace agrobus::isobus::fs {
             auto current = volume_state_.state();
 
             switch (current) {
-                case VolumeState::Present:
-                    // Check if any files are open
+            case VolumeState::Present:
+                // Check if any files are open
+                if (!open_files_.empty()) {
+                    volume_state_.transition(VolumeState::InUse);
+                    echo::category("isobus.fs.server").debug("Volume state: PRESENT -> IN_USE");
+                }
+                break;
+
+            case VolumeState::InUse:
+                // Check if all files are closed
+                if (open_files_.empty()) {
+                    volume_state_.transition(VolumeState::Present);
+                    echo::category("isobus.fs.server").debug("Volume state: IN_USE -> PRESENT");
+                }
+                break;
+
+            case VolumeState::PreparingForRemoval: {
+                volume_removal_timer_ms_ += elapsed_ms;
+
+                // Check conditions for completion
+                bool all_files_closed = open_files_.empty();
+                bool no_maintain_requests = volume_maintain_requests_.empty();
+                bool timeout_expired = volume_removal_timer_ms_ >= volume_max_removal_time_ms_;
+
+                if ((all_files_closed && no_maintain_requests) || timeout_expired) {
+                    volume_state_.transition(VolumeState::Removed);
+
+                    if (timeout_expired) {
+                        echo::category("isobus.fs.server")
+                            .warn("Volume removal timeout expired, forcing REMOVED state");
+                    } else {
+                        echo::category("isobus.fs.server").info("Volume removal complete, state: REMOVED");
+                    }
+
+                    // Force close any remaining files
                     if (!open_files_.empty()) {
-                        volume_state_.transition(VolumeState::InUse);
-                        echo::category("isobus.fs.server").debug("Volume state: PRESENT -> IN_USE");
+                        echo::category("isobus.fs.server")
+                            .warn("Force-closing ", open_files_.size(), " remaining files");
+                        open_files_.clear();
                     }
-                    break;
 
-                case VolumeState::InUse:
-                    // Check if all files are closed
-                    if (open_files_.empty()) {
-                        volume_state_.transition(VolumeState::Present);
-                        echo::category("isobus.fs.server").debug("Volume state: IN_USE -> PRESENT");
-                    }
-                    break;
+                    broadcast_volume_status();
+                    on_volume_removed.emit();
+                }
+                break;
+            }
 
-                case VolumeState::PreparingForRemoval:
-                    volume_removal_timer_ms_ += elapsed_ms;
-
-                    // Check conditions for completion
-                    bool all_files_closed = open_files_.empty();
-                    bool no_maintain_requests = volume_maintain_requests_.empty();
-                    bool timeout_expired = volume_removal_timer_ms_ >= volume_max_removal_time_ms_;
-
-                    if ((all_files_closed && no_maintain_requests) || timeout_expired) {
-                        volume_state_.transition(VolumeState::Removed);
-
-                        if (timeout_expired) {
-                            echo::category("isobus.fs.server").warn(
-                                "Volume removal timeout expired, forcing REMOVED state"
-                            );
-                        } else {
-                            echo::category("isobus.fs.server").info(
-                                "Volume removal complete, state: REMOVED"
-                            );
-                        }
-
-                        // Force close any remaining files
-                        if (!open_files_.empty()) {
-                            echo::category("isobus.fs.server").warn(
-                                "Force-closing ", open_files_.size(), " remaining files"
-                            );
-                            open_files_.clear();
-                        }
-
-                        broadcast_volume_status();
-                        on_volume_removed.emit();
-                    }
-                    break;
-
-                case VolumeState::Removed:
-                    // Waiting for reinsertion
-                    break;
+            case VolumeState::Removed:
+                // Waiting for reinsertion
+                break;
             }
         }
 
@@ -1085,17 +1036,16 @@ namespace agrobus::isobus::fs {
         void broadcast_volume_status() {
             dp::Vector<u8> data(8, 0xFF);
             data[0] = static_cast<u8>(FSFunction::VolumeStatus);
-            data[1] = 0xFF;  // No TAN for broadcasts
+            data[1] = 0xFF; // No TAN for broadcasts
             data[2] = static_cast<u8>(volume_state_.state());
             data[3] = static_cast<u8>(open_files_.size());
 
             // Broadcast to all clients (0xFF = global)
             net_.send(PGN_FILE_SERVER_TO_CLIENT, data, cf_);
 
-            echo::category("isobus.fs.server").trace(
-                "Volume status broadcast: state=", static_cast<u32>(volume_state_.state()),
-                " open_files=", open_files_.size()
-            );
+            echo::category("isobus.fs.server")
+                .trace("Volume status broadcast: state=", static_cast<u32>(volume_state_.state()),
+                       " open_files=", open_files_.size());
         }
     };
 

@@ -113,21 +113,21 @@ int main() {
                            .set_manufacturer_code(1234)
                            .set_function_code(0); // Engine
     router.add_translation(tractor_ecu, 0x20, 0x40);
-    echo::info("Engine (NAME ", tractor_ecu.value(), "): 0x20 on tractor → 0x40 on implement");
+    echo::info("Engine (NAME ", tractor_ecu.raw, "): 0x20 on tractor → 0x40 on implement");
 
     Name implement_controller = Name::build()
                                     .set_identity_number(200)
                                     .set_manufacturer_code(5678)
                                     .set_function_code(30); // Task Controller
     router.add_translation(implement_controller, 0x50, 0x21);
-    echo::info("Task Controller (NAME ", implement_controller.value(), "): 0x50 on tractor → 0x21 on implement");
+    echo::info("Task Controller (NAME ", implement_controller.raw, "): 0x50 on tractor → 0x21 on implement");
 
     Name vt_terminal = Name::build()
                            .set_identity_number(300)
                            .set_manufacturer_code(9012)
                            .set_function_code(26); // VT
     router.add_translation(vt_terminal, 0x30, 0x30);
-    echo::info("VT Terminal (NAME ", vt_terminal.value(), "): 0x30 on tractor → 0x30 on implement");
+    echo::info("VT Terminal (NAME ", vt_terminal.raw, "): 0x30 on tractor → 0x30 on implement");
 
     // Verify translations
     const auto &db = router.translation_db();
@@ -135,12 +135,12 @@ int main() {
 
     // Test address translation
     Address translated = db.translate(0x20, Side::Tractor);
-    if (translated != INVALID_ADDRESS) {
+    if (translated != NULL_ADDRESS) {
         echo::info("✓ Tractor address 0x20 translates to implement address 0x", translated);
     }
 
     Address reverse = db.translate(0x40, Side::Implement);
-    if (reverse != INVALID_ADDRESS) {
+    if (reverse != NULL_ADDRESS) {
         echo::info("✓ Implement address 0x40 translates back to tractor address 0x", reverse);
     }
 
@@ -181,7 +181,7 @@ int main() {
                       .set_manufacturer_code(1111)
                       .set_function_code(50);
     gateway.add_translation(sensor, 0x25, 0x45);
-    echo::info("\nSensor (NAME ", sensor.value(), "): 0x25 on tractor → 0x45 on implement");
+    echo::info("\nSensor (NAME ", sensor.raw, "): 0x25 on tractor → 0x45 on implement");
 
     // Register message transformations
     echo::info("\nRegistering message transforms:");
@@ -245,11 +245,11 @@ int main() {
     echo::info("\nNAME-based filtering:");
     Name trusted_device = Name::build().set_identity_number(999).set_manufacturer_code(7777);
     advanced_niu.allow_name(trusted_device);
-    echo::info("  Allowed NAME ", trusted_device.value(), " (any PGN)");
+    echo::info("  Allowed NAME ", trusted_device.raw, " (any PGN)");
 
     Name suspicious_device = Name::build().set_identity_number(666).set_manufacturer_code(6666);
     advanced_niu.block_name(suspicious_device, 0xFECA);
-    echo::info("  Blocked NAME ", suspicious_device.value(), " for PGN 0xFECA");
+    echo::info("  Blocked NAME ", suspicious_device.raw, " for PGN 0xFECA");
 
     // Rate-limited filtering
     echo::info("\nRate-limited filtering:");

@@ -115,7 +115,7 @@ namespace agrobus::j1939 {
     struct DiagnosticConfig {
         u32 dm1_interval_ms = 1000;
         bool auto_send = false;
-        u8 max_freeze_frames_per_dtc = 3; // Max freeze frames to store per DTC
+        u8 max_freeze_frames_per_dtc = 3;       // Max freeze frames to store per DTC
         bool auto_capture_freeze_frames = true; // Auto-capture on DTC activation
 
         DiagnosticConfig &interval(u32 ms) {
@@ -279,9 +279,9 @@ namespace agrobus::j1939 {
     // Performance ratios track emissions monitor execution vs. opportunities
     // Used for OBD compliance and readiness monitoring
     struct MonitorPerformanceRatio {
-        u32 spn = 0;           // Monitor identifier SPN
-        u16 numerator = 0;     // Number of times monitor executed
-        u16 denominator = 0;   // Number of monitoring opportunities
+        u32 spn = 0;         // Monitor identifier SPN
+        u16 numerator = 0;   // Number of times monitor executed
+        u16 denominator = 0; // Number of monitoring opportunities
 
         dp::Array<u8, 7> encode() const noexcept {
             dp::Array<u8, 7> bytes{};
@@ -300,8 +300,8 @@ namespace agrobus::j1939 {
 
         static MonitorPerformanceRatio decode(const u8 *data) noexcept {
             MonitorPerformanceRatio ratio;
-            ratio.spn = static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) |
-                        (static_cast<u32>(data[2] & 0x07) << 16);
+            ratio.spn =
+                static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) | (static_cast<u32>(data[2] & 0x07) << 16);
             ratio.numerator = static_cast<u16>(data[3]) | (static_cast<u16>(data[4]) << 8);
             ratio.denominator = static_cast<u16>(data[5]) | (static_cast<u16>(data[6]) << 8);
             return ratio;
@@ -321,9 +321,9 @@ namespace agrobus::j1939 {
 
     // DM20 (PGN 0xC200) contains multiple performance ratios
     struct DM20Response {
-        u8 ignition_cycles = 0;                        // Ignition cycles since DTCs cleared
-        u8 obd_monitoring_conditions_met = 0;          // OBD monitoring conditions encounter count
-        dp::Vector<MonitorPerformanceRatio> ratios;   // Performance ratios for each monitor
+        u8 ignition_cycles = 0;                     // Ignition cycles since DTCs cleared
+        u8 obd_monitoring_conditions_met = 0;       // OBD monitoring conditions encounter count
+        dp::Vector<MonitorPerformanceRatio> ratios; // Performance ratios for each monitor
 
         dp::Vector<u8> encode() const {
             dp::Vector<u8> data;
@@ -381,8 +381,8 @@ namespace agrobus::j1939 {
 
         static SPNSnapshot decode(const u8 *data) noexcept {
             SPNSnapshot snap;
-            snap.spn = static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) |
-                       (static_cast<u32>(data[2] & 0x07) << 16);
+            snap.spn =
+                static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) | (static_cast<u32>(data[2] & 0x07) << 16);
             snap.value = static_cast<u32>(data[3]) | (static_cast<u32>(data[4]) << 8) |
                          (static_cast<u32>(data[5]) << 16) | (static_cast<u32>(data[6]) << 24);
             return snap;
@@ -390,9 +390,9 @@ namespace agrobus::j1939 {
     };
 
     struct FreezeFrame {
-        DTC dtc;                                // Associated DTC
-        u32 timestamp_ms = 0;                   // Capture time
-        dp::Vector<SPNSnapshot> snapshots;      // Captured SPN values
+        DTC dtc;                           // Associated DTC
+        u32 timestamp_ms = 0;              // Capture time
+        dp::Vector<SPNSnapshot> snapshots; // Captured SPN values
 
         // Encode freeze frame for DM25 response
         dp::Vector<u8> encode() const {
@@ -445,7 +445,7 @@ namespace agrobus::j1939 {
 
     // DM25 Expanded Freeze Frame Request/Response
     struct DM25Request {
-        u32 spn = 0;     // SPN of the DTC to retrieve freeze frame for
+        u32 spn = 0; // SPN of the DTC to retrieve freeze frame for
         FMI fmi = FMI::RootCauseUnknown;
         u8 frame_number = 0; // 0 = most recent, 1 = next most recent, etc.
 
@@ -463,8 +463,8 @@ namespace agrobus::j1939 {
             DM25Request req;
             if (data.size() < 5)
                 return req;
-            req.spn = static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) |
-                      (static_cast<u32>(data[2] & 0x07) << 16);
+            req.spn =
+                static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) | (static_cast<u32>(data[2] & 0x07) << 16);
             req.fmi = static_cast<FMI>(data[3]);
             req.frame_number = data[4];
             return req;
@@ -503,10 +503,7 @@ namespace agrobus::j1939 {
 
       public:
         DiagnosticProtocol(IsoNet &net, InternalCF *cf, DiagnosticConfig config = {})
-            : net_(net),
-              cf_(cf),
-              dm1_interval_ms_(config.dm1_interval_ms),
-              auto_send_(config.auto_send),
+            : net_(net), cf_(cf), dm1_interval_ms_(config.dm1_interval_ms), auto_send_(config.auto_send),
               max_freeze_frames_per_dtc_(config.max_freeze_frames_per_dtc),
               auto_capture_freeze_frames_(config.auto_capture_freeze_frames) {}
 
@@ -825,9 +822,9 @@ namespace agrobus::j1939 {
         }
 
         // Send DM20 response (typically in response to request)
-        Result<void> send_dm20(Address destination = GLOBAL_ADDRESS) {
+        Result<void> send_dm20(Address destination = BROADCAST_ADDRESS) {
             auto data = dm20_data_.encode();
-            if (destination == GLOBAL_ADDRESS) {
+            if (destination == BROADCAST_ADDRESS) {
                 return net_.send(0xC200, data, cf_); // Broadcast
             } else {
                 ControlFunction dest_cf;
@@ -837,7 +834,8 @@ namespace agrobus::j1939 {
         }
 
         // ─── Freeze Frame Management (DM25) ──────────────────────────────────────
-        Result<void> capture_freeze_frame(const DTC &dtc, const dp::Vector<SPNSnapshot> &snapshots, u32 timestamp_ms = 0) {
+        Result<void> capture_freeze_frame(const DTC &dtc, const dp::Vector<SPNSnapshot> &snapshots,
+                                          u32 timestamp_ms = 0) {
             u32 key = make_freeze_frame_key(dtc.spn, dtc.fmi);
 
             FreezeFrame ff;
@@ -854,7 +852,8 @@ namespace agrobus::j1939 {
                 frames.erase(frames.begin()); // Remove oldest
             }
 
-            echo::category("isobus.diagnostic").debug("Freeze frame captured: spn=", dtc.spn, " frames=", frames.size());
+            echo::category("isobus.diagnostic")
+                .debug("Freeze frame captured: spn=", dtc.spn, " frames=", frames.size());
             return {};
         }
 
@@ -910,9 +909,9 @@ namespace agrobus::j1939 {
         Event<const ProductIdentification &, Address> on_product_id_received;
         Event<const SoftwareIdentification &, Address> on_software_id_received;
         Event<const DiagnosticProtocolID &, Address> on_dm5_received;
-        Event<Address> on_dm20_request;                          // Performance ratio request
-        Event<const DM20Response &, Address> on_dm20_received;   // Performance ratio data received
-        Event<const DM25Request &, Address> on_dm25_request;     // Freeze frame request
+        Event<Address> on_dm20_request;                        // Performance ratio request
+        Event<const DM20Response &, Address> on_dm20_received; // Performance ratio data received
+        Event<const DM25Request &, Address> on_dm25_request;   // Freeze frame request
 
       private:
         void track_previously_active(const DTC &dtc) {
@@ -1121,9 +1120,7 @@ namespace agrobus::j1939 {
         }
 
         // ─── Freeze Frame Helpers ────────────────────────────────────────────────
-        static u32 make_freeze_frame_key(u32 spn, FMI fmi) noexcept {
-            return (spn << 8) | static_cast<u32>(fmi);
-        }
+        static u32 make_freeze_frame_key(u32 spn, FMI fmi) noexcept { return (spn << 8) | static_cast<u32>(fmi); }
 
         void handle_dm25_request(const Message &msg) {
             if (msg.data.size() < 5)

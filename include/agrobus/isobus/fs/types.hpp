@@ -53,16 +53,16 @@ namespace agrobus::isobus::fs {
 
     // ─── Volume State (ISO 11783-13 Section 7.7) ────────────────────────────────
     enum class VolumeState : u8 {
-        Present = 0,              // Media present, idle
-        InUse = 1,                // Files open or maintain sent
-        PreparingForRemoval = 2,  // Shutdown sequence in progress
-        Removed = 3               // No access allowed
+        Present = 0,             // Media present, idle
+        InUse = 1,               // Files open or maintain sent
+        PreparingForRemoval = 2, // Shutdown sequence in progress
+        Removed = 3              // No access allowed
     };
 
     // ─── File Server Properties (ISO 11783-13 Section 7.5.2) ────────────────────
     struct FileServerProperties {
-        u8 version_number = 1;              // File server version (1 or 2)
-        u8 max_simultaneous_files = 16;     // Maximum files open at once
+        u8 version_number = 1;          // File server version (1 or 2)
+        u8 max_simultaneous_files = 16; // Maximum files open at once
 
         // Capability bits
         bool supports_directories = true;
@@ -79,11 +79,16 @@ namespace agrobus::isobus::fs {
 
             // Byte 2: capability flags
             data[2] = 0;
-            if (supports_directories) data[2] |= (1 << 0);
-            if (supports_volume_management) data[2] |= (1 << 1);
-            if (supports_file_attributes) data[2] |= (1 << 2);
-            if (supports_move_file) data[2] |= (1 << 3);
-            if (supports_delete_file) data[2] |= (1 << 4);
+            if (supports_directories)
+                data[2] |= (1 << 0);
+            if (supports_volume_management)
+                data[2] |= (1 << 1);
+            if (supports_file_attributes)
+                data[2] |= (1 << 2);
+            if (supports_move_file)
+                data[2] |= (1 << 3);
+            if (supports_delete_file)
+                data[2] |= (1 << 4);
 
             // Bytes 3-7: reserved
             return data;
@@ -91,7 +96,8 @@ namespace agrobus::isobus::fs {
 
         static FileServerProperties decode(const dp::Vector<u8> &data) {
             FileServerProperties props;
-            if (data.size() < 3) return props;
+            if (data.size() < 3)
+                return props;
 
             props.version_number = data[0];
             props.max_simultaneous_files = data[1];
@@ -112,16 +118,12 @@ namespace agrobus::isobus::fs {
         dp::String name;
         u32 size = 0;
         FileAttributes attributes = FileAttributes::None;
-        u16 date = 0;   // DOS date format
-        u16 time = 0;   // DOS time format
+        u16 date = 0; // DOS date format
+        u16 time = 0; // DOS time format
 
-        bool is_directory() const {
-            return has_attribute(attributes, FileAttributes::Directory);
-        }
+        bool is_directory() const { return has_attribute(attributes, FileAttributes::Directory); }
 
-        bool is_read_only() const {
-            return has_attribute(attributes, FileAttributes::ReadOnly);
-        }
+        bool is_read_only() const { return has_attribute(attributes, FileAttributes::ReadOnly); }
     };
 
     // ─── TAN Cache Entry (for idempotency) ──────────────────────────────────────
@@ -184,12 +186,13 @@ namespace agrobus::isobus::fs {
 
     // Validate path component (no illegal characters)
     inline bool is_valid_path_component(const dp::String &path) {
-        if (path.empty()) return false;
+        if (path.empty())
+            return false;
 
         // Check for illegal characters in ISO 11783-13
         for (char c : path) {
-            if (c == '/' || c == '\\' || c == ':' || c == '*' ||
-                c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+            if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' ||
+                c == '|') {
                 return false;
             }
         }
@@ -210,14 +213,10 @@ namespace agrobus::isobus::fs {
     // ─── DOS Date/Time Conversion ────────────────────────────────────────────────
 
     // Pack date into DOS format: (year-1980)<<9 | month<<5 | day
-    inline u16 pack_dos_date(u16 year, u8 month, u8 day) {
-        return ((year - 1980) << 9) | (month << 5) | day;
-    }
+    inline u16 pack_dos_date(u16 year, u8 month, u8 day) { return ((year - 1980) << 9) | (month << 5) | day; }
 
     // Pack time into DOS format: hour<<11 | minute<<5 | (second/2)
-    inline u16 pack_dos_time(u8 hour, u8 minute, u8 second) {
-        return (hour << 11) | (minute << 5) | (second / 2);
-    }
+    inline u16 pack_dos_time(u8 hour, u8 minute, u8 second) { return (hour << 11) | (minute << 5) | (second / 2); }
 
     // Unpack DOS date
     inline void unpack_dos_date(u16 dos_date, u16 &year, u8 &month, u8 &day) {

@@ -20,10 +20,10 @@ namespace agrobus::isobus {
 
     // ─── Power State (ISO 11783-9 Section 4.6) ──────────────────────────────────
     enum class PowerState {
-        PowerOff,            // All power off
-        IgnitionOn,          // Normal operation
-        ShutdownInitiated,   // Key off, 3 min max power available
-        FinalShutdown        // Power down complete
+        PowerOff,          // All power off
+        IgnitionOn,        // Normal operation
+        ShutdownInitiated, // Key off, 3 min max power available
+        FinalShutdown      // Power down complete
     };
 
     // ─── TECU Classification (ISO 11783-9 Section 4.4.2) ────────────────────────
@@ -31,25 +31,30 @@ namespace agrobus::isobus {
         TECUClass base_class = TECUClass::Class1;
 
         // Addenda
-        bool navigation = false;      // N — GPS position
-        bool guidance = false;        // G — Guidance/steering (v2+)
-        bool front_mounted = false;   // F — Front hitch/PTO
-        bool powertrain = false;      // P — Powertrain control (v2+)
-        bool motion_init = false;     // M — Motion initiation (v2+)
+        bool navigation = false;    // N — GPS position
+        bool guidance = false;      // G — Guidance/steering (v2+)
+        bool front_mounted = false; // F — Front hitch/PTO
+        bool powertrain = false;    // P — Powertrain control (v2+)
+        bool motion_init = false;   // M — Motion initiation (v2+)
 
         // Version
-        u8 version = 1; // 1 or 2
+        u8 version = 1;  // 1 or 2
         u8 instance = 0; // 0 = primary, 1+ = secondary
 
         // Convert to string (e.g., "Class 2NF", "Class 3GP")
         dp::String to_string() const {
             dp::String result = "Class ";
             result += dp::to_string(static_cast<u8>(base_class));
-            if (navigation) result += "N";
-            if (front_mounted) result += "F";
-            if (guidance) result += "G";
-            if (powertrain) result += "P";
-            if (motion_init) result += "M";
+            if (navigation)
+                result += "N";
+            if (front_mounted)
+                result += "F";
+            if (guidance)
+                result += "G";
+            if (powertrain)
+                result += "P";
+            if (motion_init)
+                result += "M";
             return result;
         }
     };
@@ -61,10 +66,22 @@ namespace agrobus::isobus {
         u8 ecu_pwr_current_amps = 15;      // ECU_PWR minimum: 15A
         u8 pwr_current_amps = 50;          // PWR minimum: 50A
 
-        PowerConfig &shutdown_time(u32 ms) { shutdown_max_time_ms = ms; return *this; }
-        PowerConfig &maintain_timeout(u32 ms) { maintain_timeout_ms = ms; return *this; }
-        PowerConfig &ecu_power(u8 amps) { ecu_pwr_current_amps = amps; return *this; }
-        PowerConfig &power(u8 amps) { pwr_current_amps = amps; return *this; }
+        PowerConfig &shutdown_time(u32 ms) {
+            shutdown_max_time_ms = ms;
+            return *this;
+        }
+        PowerConfig &maintain_timeout(u32 ms) {
+            maintain_timeout_ms = ms;
+            return *this;
+        }
+        PowerConfig &ecu_power(u8 amps) {
+            ecu_pwr_current_amps = amps;
+            return *this;
+        }
+        PowerConfig &power(u8 amps) {
+            pwr_current_amps = amps;
+            return *this;
+        }
     };
 
     // ─── TECU Configuration ──────────────────────────────────────────────────────
@@ -75,22 +92,30 @@ namespace agrobus::isobus {
         u32 status_broadcast_interval_ms = 100;      // Status messages every 100ms
         bool enable_gateway = false;                 // Enable message gateway between ports
 
-        TECUConfig &set_classification(TECUClassification c) { classification = c; return *this; }
-        TECUConfig &set_power(PowerConfig p) { power = p; return *this; }
-        TECUConfig &broadcast_interval(u32 ms) { facilities_broadcast_interval_ms = ms; return *this; }
-        TECUConfig &status_interval(u32 ms) { status_broadcast_interval_ms = ms; return *this; }
-        TECUConfig &gateway(bool enable) { enable_gateway = enable; return *this; }
+        TECUConfig &set_classification(TECUClassification c) {
+            classification = c;
+            return *this;
+        }
+        TECUConfig &set_power(PowerConfig p) {
+            power = p;
+            return *this;
+        }
+        TECUConfig &broadcast_interval(u32 ms) {
+            facilities_broadcast_interval_ms = ms;
+            return *this;
+        }
+        TECUConfig &status_interval(u32 ms) {
+            status_broadcast_interval_ms = ms;
+            return *this;
+        }
+        TECUConfig &gateway(bool enable) {
+            enable_gateway = enable;
+            return *this;
+        }
     };
 
     // ─── Safe Mode Trigger ───────────────────────────────────────────────────────
-    enum class SafeModeTrigger {
-        None,
-        PowerLoss,
-        ECUPowerLoss,
-        CANBusFail,
-        TECUCommLoss,
-        ManualTrigger
-    };
+    enum class SafeModeTrigger { None, PowerLoss, ECUPowerLoss, CANBusFail, TECUCommLoss, ManualTrigger };
 
     // ─── Maintain Power Request ─────────────────────────────────────────────────
     struct MaintainPowerRequest {
@@ -163,17 +188,11 @@ namespace agrobus::isobus {
 
             // Subscribe to facilities requests
             facilities_interface_.on_facilities_required.subscribe(
-                [this](const TractorFacilities &required) {
-                    handle_facilities_request(required);
-                }
-            );
+                [this](const TractorFacilities &required) { handle_facilities_request(required); });
 
             // Subscribe to facilities responses (for secondary TECUs to learn about primary)
             facilities_interface_.on_facilities_response.subscribe(
-                [this](const TractorFacilities &response) {
-                    handle_facilities_response(response);
-                }
-            );
+                [this](const TractorFacilities &response) { handle_facilities_response(response); });
 
             // Initialize working set manager
             working_set_manager_.emplace(net_, cf_);
@@ -182,8 +201,7 @@ namespace agrobus::isobus {
                 return ws_result;
             }
 
-            echo::category("isobus.tecu").info("Tractor ECU initialized: ",
-                config_.classification.to_string());
+            echo::category("isobus.tecu").info("Tractor ECU initialized: ", config_.classification.to_string());
 
             return {};
         }
@@ -202,10 +220,9 @@ namespace agrobus::isobus {
             } else {
                 power_state_.transition(PowerState::ShutdownInitiated);
                 shutdown_timer_ms_ = 0;
-                echo::category("isobus.tecu.power").info(
-                    "Key OFF: Shutdown initiated, max ",
-                    config_.power.shutdown_max_time_ms / 1000, "s available"
-                );
+                echo::category("isobus.tecu.power")
+                    .info("Key OFF: Shutdown initiated, max ", config_.power.shutdown_max_time_ms / 1000,
+                          "s available");
                 on_power_state_changed.emit(PowerState::ShutdownInitiated);
             }
 
@@ -225,10 +242,8 @@ namespace agrobus::isobus {
                     req.ecu_pwr = ecu_pwr;
                     req.pwr = pwr;
                     req.timestamp_ms = current_time_ms;
-                    echo::category("isobus.tecu.power").debug(
-                        "Maintain power request updated from 0x", requester,
-                        " ECU_PWR=", ecu_pwr, " PWR=", pwr
-                    );
+                    echo::category("isobus.tecu.power")
+                        .debug("Maintain power request updated from 0x", requester, " ECU_PWR=", ecu_pwr, " PWR=", pwr);
                     return {};
                 }
             }
@@ -236,10 +251,8 @@ namespace agrobus::isobus {
             // New request
             maintain_power_requests_.push_back({requester, ecu_pwr, pwr, current_time_ms});
             last_maintain_request_ms_ = current_time_ms;
-            echo::category("isobus.tecu.power").debug(
-                "New maintain power request from 0x", requester,
-                " ECU_PWR=", ecu_pwr, " PWR=", pwr
-            );
+            echo::category("isobus.tecu.power")
+                .debug("New maintain power request from 0x", requester, " ECU_PWR=", ecu_pwr, " PWR=", pwr);
 
             return {};
         }
@@ -248,8 +261,7 @@ namespace agrobus::isobus {
         Result<void> trigger_safe_mode(SafeModeTrigger trigger) {
             safe_mode_trigger_ = trigger;
 
-            echo::category("isobus.tecu.safety").warn("Safe mode triggered: ",
-                static_cast<u8>(trigger));
+            echo::category("isobus.tecu.safety").warn("Safe mode triggered: ", static_cast<u8>(trigger));
 
             // Execute failsafe actions (ISO 11783-9 Section 4.6.5)
             // R1: No unexpected starting
@@ -272,7 +284,7 @@ namespace agrobus::isobus {
                 echo::category("isobus.tecu.safety").info("Hitches set to neutral");
 
                 // Set all aux valves to safe position (block)
-                for (u8 i = 0; i < MAX_AUX_VALVES; ++i) {
+                for (u8 i = 0; i < 32; ++i) { // MAX_AUX_VALVES from tim.hpp
                     auto valve = tim_server_->get_aux_valve(i);
                     if (valve.state_supported) {
                         tim_server_->set_aux_valve(i, false, 0);
@@ -305,9 +317,7 @@ namespace agrobus::isobus {
             return {};
         }
 
-        TimServer *get_tim_server() {
-            return tim_server_.has_value() ? &(*tim_server_) : nullptr;
-        }
+        TimServer *get_tim_server() { return tim_server_.has_value() ? &(*tim_server_) : nullptr; }
 
         // ─── Classification and Facilities ───────────────────────────────────────
         TECUClassification get_classification() const { return config_.classification; }
@@ -315,8 +325,7 @@ namespace agrobus::isobus {
         Result<void> set_classification(TECUClassification classification) {
             config_.classification = classification;
             update_supported_facilities();
-            echo::category("isobus.tecu").info("Classification updated: ",
-                classification.to_string());
+            echo::category("isobus.tecu").info("Classification updated: ", classification.to_string());
             return {};
         }
 
@@ -469,9 +478,7 @@ namespace agrobus::isobus {
 
             // Secondary TECUs only broadcast after learning about primary's facilities
             if (is_secondary() && !primary_tecu_facilities_.has_value()) {
-                echo::category("isobus.tecu").trace(
-                    "Secondary TECU waiting for primary facilities before broadcast"
-                );
+                echo::category("isobus.tecu").trace("Secondary TECU waiting for primary facilities before broadcast");
                 return;
             }
 
@@ -486,8 +493,7 @@ namespace agrobus::isobus {
 
         // ─── Send status messages (PTO, hitch, etc.) ─────────────────────────────
         void send_status_messages() {
-            if (power_state_.state() == PowerState::PowerOff ||
-                power_state_.state() == PowerState::FinalShutdown) {
+            if (power_state_.state() == PowerState::PowerOff || power_state_.state() == PowerState::FinalShutdown) {
                 return;
             }
 
@@ -531,8 +537,10 @@ namespace agrobus::isobus {
             TractorFacilities effective = supported_facilities_;
             const auto &primary = *primary_tecu_facilities_;
 
-            // Disable any facilities already provided by primary
-            #define DEDUPE_FACILITY(name) if (primary.name) effective.name = false
+// Disable any facilities already provided by primary
+#define DEDUPE_FACILITY(name)                                                                                          \
+    if (primary.name)                                                                                                  \
+    effective.name = false
 
             // Class 1
             DEDUPE_FACILITY(rear_hitch_position);
@@ -582,92 +590,83 @@ namespace agrobus::isobus {
             DEDUPE_FACILITY(machine_selected_speed);
             DEDUPE_FACILITY(machine_selected_speed_command);
 
-            #undef DEDUPE_FACILITY
+#undef DEDUPE_FACILITY
 
-            echo::category("isobus.tecu").debug(
-                "Secondary TECU effective facilities computed (after deduplication)"
-            );
+            echo::category("isobus.tecu").debug("Secondary TECU effective facilities computed (after deduplication)");
 
             return effective;
         }
 
         // ─── Check if this TECU is primary ──────────────────────────────────────
-        bool is_primary() const {
-            return config_.classification.instance == 0;
-        }
+        bool is_primary() const { return config_.classification.instance == 0; }
 
         // ─── Check if this TECU is secondary ────────────────────────────────────
-        bool is_secondary() const {
-            return config_.classification.instance > 0;
-        }
+        bool is_secondary() const { return config_.classification.instance > 0; }
 
         // ─── Power management state machine update ───────────────────────────────
         void update_power_management(u32 elapsed_ms) {
             auto current_state = power_state_.state();
 
             switch (current_state) {
-                case PowerState::PowerOff:
-                    // Waiting for key ON
-                    break;
+            case PowerState::PowerOff:
+                // Waiting for key ON
+                break;
 
-                case PowerState::IgnitionOn:
-                    // Normal operation
-                    break;
+            case PowerState::IgnitionOn:
+                // Normal operation
+                break;
 
-                case PowerState::ShutdownInitiated: {
-                    shutdown_timer_ms_ += elapsed_ms;
+            case PowerState::ShutdownInitiated: {
+                shutdown_timer_ms_ += elapsed_ms;
 
-                    // Remove expired maintain power requests
-                    maintain_power_requests_.erase(
-                        std::remove_if(maintain_power_requests_.begin(), maintain_power_requests_.end(),
-                            [this, elapsed_ms](const MaintainPowerRequest &req) {
-                                return req.is_expired(shutdown_timer_ms_, config_.power.maintain_timeout_ms);
-                            }),
-                        maintain_power_requests_.end()
-                    );
+                // Remove expired maintain power requests
+                maintain_power_requests_.erase(
+                    std::remove_if(maintain_power_requests_.begin(), maintain_power_requests_.end(),
+                                   [this, elapsed_ms](const MaintainPowerRequest &req) {
+                                       return req.is_expired(shutdown_timer_ms_, config_.power.maintain_timeout_ms);
+                                   }),
+                    maintain_power_requests_.end());
 
-                    // Check if any CFs request power maintenance
-                    bool any_ecu_pwr_requested = false;
-                    bool any_pwr_requested = false;
+                // Check if any CFs request power maintenance
+                bool any_ecu_pwr_requested = false;
+                bool any_pwr_requested = false;
 
-                    for (const auto &req : maintain_power_requests_) {
-                        if (req.ecu_pwr) any_ecu_pwr_requested = true;
-                        if (req.pwr) any_pwr_requested = true;
-                    }
-
-                    // Update power outputs based on requests
-                    ecu_pwr_enabled_ = any_ecu_pwr_requested;
-                    pwr_enabled_ = any_pwr_requested;
-
-                    // Check shutdown conditions
-                    if (shutdown_timer_ms_ >= config_.power.shutdown_max_time_ms) {
-                        // Max time expired
-                        echo::category("isobus.tecu.power").warn(
-                            "Shutdown max time expired, forcing power off"
-                        );
-                        power_state_.transition(PowerState::FinalShutdown);
-                        ecu_pwr_enabled_ = false;
-                        pwr_enabled_ = false;
-                        on_shutdown_complete.emit();
-                    } else if (maintain_power_requests_.empty() &&
-                               shutdown_timer_ms_ >= config_.power.maintain_timeout_ms) {
-                        // No requests and minimum hold time met
-                        echo::category("isobus.tecu.power").info(
-                            "No maintain power requests, initiating final shutdown"
-                        );
-                        power_state_.transition(PowerState::FinalShutdown);
-                        ecu_pwr_enabled_ = false;
-                        pwr_enabled_ = false;
-                        on_shutdown_complete.emit();
-                    }
-                    break;
+                for (const auto &req : maintain_power_requests_) {
+                    if (req.ecu_pwr)
+                        any_ecu_pwr_requested = true;
+                    if (req.pwr)
+                        any_pwr_requested = true;
                 }
 
-                case PowerState::FinalShutdown:
-                    // Power off complete
+                // Update power outputs based on requests
+                ecu_pwr_enabled_ = any_ecu_pwr_requested;
+                pwr_enabled_ = any_pwr_requested;
+
+                // Check shutdown conditions
+                if (shutdown_timer_ms_ >= config_.power.shutdown_max_time_ms) {
+                    // Max time expired
+                    echo::category("isobus.tecu.power").warn("Shutdown max time expired, forcing power off");
+                    power_state_.transition(PowerState::FinalShutdown);
                     ecu_pwr_enabled_ = false;
                     pwr_enabled_ = false;
-                    break;
+                    on_shutdown_complete.emit();
+                } else if (maintain_power_requests_.empty() &&
+                           shutdown_timer_ms_ >= config_.power.maintain_timeout_ms) {
+                    // No requests and minimum hold time met
+                    echo::category("isobus.tecu.power").info("No maintain power requests, initiating final shutdown");
+                    power_state_.transition(PowerState::FinalShutdown);
+                    ecu_pwr_enabled_ = false;
+                    pwr_enabled_ = false;
+                    on_shutdown_complete.emit();
+                }
+                break;
+            }
+
+            case PowerState::FinalShutdown:
+                // Power off complete
+                ecu_pwr_enabled_ = false;
+                pwr_enabled_ = false;
+                break;
             }
         }
     };

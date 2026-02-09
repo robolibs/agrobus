@@ -72,7 +72,7 @@ int main() {
     echo::info("TIM server attached");
 
     // Subscribe to power state changes
-    tecu.on_power_state_changed.subscribe([](PowerState state) {
+    tecu.on_power_state_changed.subscribe([](isobus::PowerState state) {
         echo::info("Power state changed: ", static_cast<u32>(state));
     });
 
@@ -160,7 +160,7 @@ int main() {
     }
 
     echo::info("  ECU_PWR: ", tecu.get_ecu_pwr_enabled() ? "ON" : "OFF");
-    echo::info("  PWR: ", tecu.get_pwr_enabled() ? "OFF (expected)");
+    echo::info("  PWR: ", tecu.get_pwr_enabled() ? "ON" : "OFF (expected)");
 
     // CF finishes completely, stop requesting power
     echo::info("CF 0x42 finished, stopping power requests...");
@@ -175,7 +175,7 @@ int main() {
     echo::info("Final shutdown should have occurred");
     echo::info("  Power state: ", static_cast<u32>(tecu.get_power_state()));
     echo::info("  ECU_PWR: ", tecu.get_ecu_pwr_enabled() ? "ON" : "OFF");
-    echo::info("  PWR: ", tecu.get_pwr_enabled() ? "OFF (expected)");
+    echo::info("  PWR: ", tecu.get_pwr_enabled() ? "ON" : "OFF (expected)");
 
     // ═══════════════════════════════════════════════════════════════════════
     // SCENARIO 3: Safe mode trigger
