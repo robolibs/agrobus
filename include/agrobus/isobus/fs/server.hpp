@@ -106,8 +106,11 @@ namespace agrobus::isobus::fs {
         u32 current_time_ms_ = 0;
 
         // Volume info
-        VolumeState volume_state_ = VolumeState::Present;
+        StateMachine<VolumeState> volume_state_{VolumeState::Present};
         dp::String volume_name_ = "ISOBUS";
+        u32 volume_removal_timer_ms_ = 0;
+        u32 volume_max_removal_time_ms_ = 10000;  // Max 10s for removal prep
+        dp::Vector<Address> volume_maintain_requests_;
 
         // Properties
         FileServerProperties properties_;
@@ -237,11 +240,97 @@ namespace agrobus::isobus::fs {
         }
 
         // ─── Volume Management ───────────────────────────────────────────────────
-        VolumeState get_volume_state() const { return volume_state_; }
+        VolumeState get_volume_state() const { return volume_state_.state(); }
 
-        void set_volume_state(VolumeState state) {
-            volume_state_ = state;
-            echo::category("isobus.fs.server").info("Volume state: ", static_cast<u8>(state));
+        // Initiate volume removal sequence (ISO 11783-13 Section 7.7)
+        Result<void> prepare_volume_for_removal() {
+            auto current = volume_state_.state();
+
+            if (current == VolumeState::Present || current == VolumeState::InUse) {
+                volume_state_.transition(VolumeState::PreparingForRemoval);
+                volume_removal_timer_ms_ = 0;
+                volume_maintain_requests_.clear();
+
+                echo::category("isobus.fs.server").info(
+                    "Volume removal initiated, max time: ",
+                    volume_max_removal_time_ms_ / 1000, "s"
+                );
+
+                // Broadcast volume status change
+                broadcast_volume_status();
+
+                on_volume_preparing_for_removal.emit();
+                return {};
+            }
+
+            return Result<void>::err(Error::invalid_state("volume not in removable state"));
+        }
+
+        // Client requests to maintain volume power during removal
+        void receive_volume_maintain_request(Address client) {
+            if (volume_state_.state() != VolumeState::PreparingForRemoval) {
+                return;
+            }
+
+            // Add or update maintain request
+            bool found = false;
+            for (auto addr : volume_maintain_requests_) {
+                if (addr == client) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                volume_maintain_requests_.push_back(client);
+                echo::category("isobus.fs.server").debug(
+                    "Volume maintain request from client ", client
+                );
+            }
+        }
+
+        // Client finished with volume
+        void clear_volume_maintain_request(Address client) {
+            volume_maintain_requests_.erase(
+                std::remove(volume_maintain_requests_.begin(),
+                          volume_maintain_requests_.end(), client),
+                volume_maintain_requests_.end()
+            );
+        }
+
+        // Force volume to removed state
+        Result<void> set_volume_removed() {
+            volume_state_.transition(VolumeState::Removed);
+            echo::category("isobus.fs.server").warn("Volume set to REMOVED state");
+
+            // Close all open files
+            for (auto &open_file : open_files_) {
+                echo::category("isobus.fs.server").debug(
+                    "Force-closing file handle ", static_cast<u32>(open_file.handle),
+                    " due to volume removal"
+                );
+            }
+            open_files_.clear();
+
+            broadcast_volume_status();
+            on_volume_removed.emit();
+
+            return {};
+        }
+
+        // Reinsert volume (transition from Removed back to Present)
+        Result<void> reinsert_volume() {
+            if (volume_state_.state() != VolumeState::Removed) {
+                return Result<void>::err(Error::invalid_state("volume not in removed state"));
+            }
+
+            volume_state_.transition(VolumeState::Present);
+            echo::category("isobus.fs.server").info("Volume reinserted, state: PRESENT");
+
+            broadcast_volume_status();
+            on_volume_present.emit();
+
+            return {};
         }
 
         // ─── Busy State Control ──────────────────────────────────────────────────
@@ -254,6 +343,9 @@ namespace agrobus::isobus::fs {
         // ─── Update Loop ─────────────────────────────────────────────────────────
         void update(u32 elapsed_ms) {
             current_time_ms_ += elapsed_ms;
+
+            // Update volume state machine
+            update_volume_state_machine(elapsed_ms);
 
             // Clean up expired TAN cache entries
             cleanup_expired_tan_cache();
@@ -275,6 +367,9 @@ namespace agrobus::isobus::fs {
         Event<Address> on_client_disconnected;
         Event<Address, dp::String> on_file_opened;
         Event<Address, FileHandle> on_file_closed;
+        Event<> on_volume_preparing_for_removal;
+        Event<> on_volume_removed;
+        Event<> on_volume_present;
 
       private:
         // ─── Message Handling ────────────────────────────────────────────────────
@@ -923,6 +1018,84 @@ namespace agrobus::isobus::fs {
                 on_client_disconnected.emit(addr);
                 clients_.erase(addr);
             }
+        }
+
+        // ─── Volume State Machine Update ─────────────────────────────────────────
+        void update_volume_state_machine(u32 elapsed_ms) {
+            auto current = volume_state_.state();
+
+            switch (current) {
+                case VolumeState::Present:
+                    // Check if any files are open
+                    if (!open_files_.empty()) {
+                        volume_state_.transition(VolumeState::InUse);
+                        echo::category("isobus.fs.server").debug("Volume state: PRESENT -> IN_USE");
+                    }
+                    break;
+
+                case VolumeState::InUse:
+                    // Check if all files are closed
+                    if (open_files_.empty()) {
+                        volume_state_.transition(VolumeState::Present);
+                        echo::category("isobus.fs.server").debug("Volume state: IN_USE -> PRESENT");
+                    }
+                    break;
+
+                case VolumeState::PreparingForRemoval:
+                    volume_removal_timer_ms_ += elapsed_ms;
+
+                    // Check conditions for completion
+                    bool all_files_closed = open_files_.empty();
+                    bool no_maintain_requests = volume_maintain_requests_.empty();
+                    bool timeout_expired = volume_removal_timer_ms_ >= volume_max_removal_time_ms_;
+
+                    if ((all_files_closed && no_maintain_requests) || timeout_expired) {
+                        volume_state_.transition(VolumeState::Removed);
+
+                        if (timeout_expired) {
+                            echo::category("isobus.fs.server").warn(
+                                "Volume removal timeout expired, forcing REMOVED state"
+                            );
+                        } else {
+                            echo::category("isobus.fs.server").info(
+                                "Volume removal complete, state: REMOVED"
+                            );
+                        }
+
+                        // Force close any remaining files
+                        if (!open_files_.empty()) {
+                            echo::category("isobus.fs.server").warn(
+                                "Force-closing ", open_files_.size(), " remaining files"
+                            );
+                            open_files_.clear();
+                        }
+
+                        broadcast_volume_status();
+                        on_volume_removed.emit();
+                    }
+                    break;
+
+                case VolumeState::Removed:
+                    // Waiting for reinsertion
+                    break;
+            }
+        }
+
+        // ─── Volume Status Broadcast ─────────────────────────────────────────────
+        void broadcast_volume_status() {
+            dp::Vector<u8> data(8, 0xFF);
+            data[0] = static_cast<u8>(FSFunction::VolumeStatus);
+            data[1] = 0xFF;  // No TAN for broadcasts
+            data[2] = static_cast<u8>(volume_state_.state());
+            data[3] = static_cast<u8>(open_files_.size());
+
+            // Broadcast to all clients (0xFF = global)
+            net_.send(PGN_FILE_SERVER_TO_CLIENT, data, cf_);
+
+            echo::category("isobus.fs.server").trace(
+                "Volume status broadcast: state=", static_cast<u32>(volume_state_.state()),
+                " open_files=", open_files_.size()
+            );
         }
     };
 
