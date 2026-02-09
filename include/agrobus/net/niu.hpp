@@ -561,4 +561,445 @@ namespace agrobus::net {
             }
         }
     };
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // Repeater NIU (ISO 11783-4, Section 6.2)
+    // ═════════════════════════════════════════════════════════════════════════════
+    // A Repeater extends the physical network by forwarding all frames bidirectionally
+    // with optional filtering. It does NOT perform address translation - all devices
+    // on both segments share the same address space and must have unique addresses.
+    //
+    // Use cases:
+    // - Extending cable length beyond physical limits
+    // - Segment isolation with simple forwarding
+    // - Optional filtering for bandwidth management
+    //
+    // Constraints:
+    // - No address translation (single address space)
+    // - All source addresses must be unique across both segments
+    // - Address claims propagate to both sides
+    //
+    class RepeaterNIU : public NIU {
+      public:
+        explicit RepeaterNIU(NIUConfig config = {}) : NIU(std::move(config)) {
+            // Repeater forwards everything by default
+            config_.forward_global_by_default = true;
+            config_.forward_specific_by_default = true;
+            config_.filter_mode = NIUFilterMode::PassAll;
+        }
+
+        // ─── Initialize repeater ─────────────────────────────────────────────────
+        Result<void> initialize() {
+            echo::category("isobus.niu.repeater").info("Repeater NIU initialized");
+            return start();
+        }
+
+        // ─── Verify address uniqueness ───────────────────────────────────────────
+        // Repeaters must ensure no address conflicts across segments
+        bool check_address_unique(Address addr) const {
+            // Would check both networks for address conflicts
+            // For now, just a placeholder
+            return true;
+        }
+    };
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // Bridge NIU (ISO 11783-4, Section 6.3)
+    // ═════════════════════════════════════════════════════════════════════════════
+    // A Bridge is similar to a Repeater but with more intelligent filtering.
+    // Like Repeater, it does NOT perform address translation - single address space.
+    //
+    // Differences from Repeater:
+    // - More sophisticated filtering (typically filters by PGN/priority)
+    // - May implement learning bridge behavior (MAC table)
+    // - Better bandwidth management
+    //
+    // Use cases:
+    // - Segment isolation with smart forwarding
+    // - Reducing cross-segment traffic
+    // - Priority-based forwarding
+    //
+    class BridgeNIU : public NIU {
+      public:
+        explicit BridgeNIU(NIUConfig config = {}) : NIU(std::move(config)) {
+            // Bridge uses configured filter mode (may be BlockAll or PassAll)
+        }
+
+        // ─── Initialize bridge ───────────────────────────────────────────────────
+        Result<void> initialize() {
+            echo::category("isobus.niu.bridge").info("Bridge NIU initialized with filter mode ",
+                                                     config_.filter_mode == NIUFilterMode::PassAll ? "PassAll"
+                                                                                                   : "BlockAll");
+            return start();
+        }
+
+        // ─── Learning bridge behavior ────────────────────────────────────────────
+        // Track which addresses are on which side to avoid unnecessary forwarding
+        void learn_address(Address addr, Side side) {
+            address_table_[addr] = side;
+            echo::category("isobus.niu.bridge").debug("learned address ", addr, " on ",
+                                                      side == Side::Tractor ? "tractor" : "implement");
+        }
+
+        dp::Optional<Side> lookup_address(Address addr) const {
+            auto it = address_table_.find(addr);
+            if (it != address_table_.end()) {
+                return it->second;
+            }
+            return dp::nullopt;
+        }
+
+      private:
+        dp::Map<Address, Side> address_table_; // Learning bridge MAC table
+    };
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // Address Translation Database (ISO 11783-4, Section 6.4)
+    // ═════════════════════════════════════════════════════════════════════════════
+    // Maps addresses between different network segments for Router/Gateway NIUs.
+    // Each NAME gets assigned different addresses on each segment.
+    //
+    struct AddressTranslation {
+        Name name;                 // Device NAME
+        Address tractor_address;   // Address on tractor segment
+        Address implement_address; // Address on implement segment
+        bool active = true;        // Whether translation is active
+
+        AddressTranslation() = default;
+        AddressTranslation(Name n, Address trac, Address impl)
+            : name(n), tractor_address(trac), implement_address(impl) {}
+
+        // Translate address from one side to the other
+        Address translate(Address addr, Side from_side) const {
+            if (from_side == Side::Tractor && addr == tractor_address) {
+                return implement_address;
+            }
+            if (from_side == Side::Implement && addr == implement_address) {
+                return tractor_address;
+            }
+            return INVALID_ADDRESS; // No translation
+        }
+    };
+
+    class AddressTranslationDB {
+        dp::Vector<AddressTranslation> translations_;
+
+      public:
+        // ─── Add translation entry ───────────────────────────────────────────────
+        void add(Name name, Address tractor_addr, Address implement_addr) {
+            // Check if translation already exists
+            for (auto &t : translations_) {
+                if (t.name == name) {
+                    t.tractor_address = tractor_addr;
+                    t.implement_address = implement_addr;
+                    t.active = true;
+                    return;
+                }
+            }
+            translations_.push_back(AddressTranslation{name, tractor_addr, implement_addr});
+        }
+
+        // ─── Remove translation ──────────────────────────────────────────────────
+        void remove(Name name) {
+            for (auto it = translations_.begin(); it != translations_.end(); ++it) {
+                if (it->name == name) {
+                    translations_.erase(it);
+                    return;
+                }
+            }
+        }
+
+        // ─── Translate address ───────────────────────────────────────────────────
+        Address translate(Address addr, Side from_side) const {
+            for (const auto &t : translations_) {
+                if (!t.active)
+                    continue;
+                Address result = t.translate(addr, from_side);
+                if (result != INVALID_ADDRESS) {
+                    return result;
+                }
+            }
+            return INVALID_ADDRESS;
+        }
+
+        // ─── Lookup by address ───────────────────────────────────────────────────
+        dp::Optional<AddressTranslation> lookup_by_address(Address addr, Side side) const {
+            for (const auto &t : translations_) {
+                if (!t.active)
+                    continue;
+                if (side == Side::Tractor && t.tractor_address == addr) {
+                    return t;
+                }
+                if (side == Side::Implement && t.implement_address == addr) {
+                    return t;
+                }
+            }
+            return dp::nullopt;
+        }
+
+        // ─── Lookup by NAME ──────────────────────────────────────────────────────
+        dp::Optional<AddressTranslation> lookup_by_name(Name name) const {
+            for (const auto &t : translations_) {
+                if (t.active && t.name == name) {
+                    return t;
+                }
+            }
+            return dp::nullopt;
+        }
+
+        // ─── Check address availability ──────────────────────────────────────────
+        bool is_address_available(Address addr, Side side) const {
+            for (const auto &t : translations_) {
+                if (!t.active)
+                    continue;
+                if (side == Side::Tractor && t.tractor_address == addr) {
+                    return false;
+                }
+                if (side == Side::Implement && t.implement_address == addr) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        const dp::Vector<AddressTranslation> &entries() const noexcept { return translations_; }
+
+        void clear() { translations_.clear(); }
+    };
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // Router NIU (ISO 11783-4, Section 6.4)
+    // ═════════════════════════════════════════════════════════════════════════════
+    // A Router maintains separate address spaces on each segment and performs
+    // address translation when forwarding messages. This allows the same NAME
+    // to have different addresses on each segment.
+    //
+    // Key features:
+    // - Address translation database
+    // - Source/destination address rewriting
+    // - Address claim coordination
+    // - Separate address spaces per segment
+    //
+    // Use cases:
+    // - Connecting segments with address conflicts
+    // - Implementing security boundaries
+    // - Network segmentation with controlled routing
+    //
+    class RouterNIU : public NIU {
+        AddressTranslationDB translation_db_;
+
+      public:
+        explicit RouterNIU(NIUConfig config = {}) : NIU(std::move(config)) {}
+
+        // ─── Initialize router ───────────────────────────────────────────────────
+        Result<void> initialize() {
+            echo::category("isobus.niu.router").info("Router NIU initialized with address translation");
+            return start();
+        }
+
+        // ─── Address translation management ──────────────────────────────────────
+        void add_translation(Name name, Address tractor_addr, Address implement_addr) {
+            translation_db_.add(name, tractor_addr, implement_addr);
+            echo::category("isobus.niu.router")
+                .info("added translation: NAME=", name.value(), " tractor=", tractor_addr, " implement=", implement_addr);
+        }
+
+        void remove_translation(Name name) {
+            translation_db_.remove(name);
+            echo::category("isobus.niu.router").info("removed translation for NAME=", name.value());
+        }
+
+        const AddressTranslationDB &translation_db() const noexcept { return translation_db_; }
+
+        // ─── Translate and forward frame ─────────────────────────────────────────
+        void process_tractor_frame(const Frame &frame) { process_and_translate(frame, Side::Tractor); }
+
+        void process_implement_frame(const Frame &frame) { process_and_translate(frame, Side::Implement); }
+
+      private:
+        void process_and_translate(const Frame &frame, Side origin) {
+            if (!state_.is(NIUState::Active)) {
+                return;
+            }
+
+            PGN pgn = frame.pgn();
+            Address source = frame.source();
+            Address destination = frame.destination();
+
+            // Resolve filtering policy
+            auto [policy, rate_limited] = resolve_policy_ex(pgn, source, destination, frame.is_broadcast(), origin);
+
+            if (rate_limited || policy == ForwardPolicy::Block) {
+                ++blocked_count_;
+                on_blocked.emit(frame, origin);
+                return;
+            }
+
+            // Perform address translation
+            Address translated_source = translation_db_.translate(source, origin);
+            Address translated_dest = INVALID_ADDRESS;
+
+            if (!frame.is_broadcast()) {
+                translated_dest = translation_db_.translate(destination, origin);
+                if (translated_dest == INVALID_ADDRESS) {
+                    // Destination not in translation table - block
+                    ++blocked_count_;
+                    on_blocked.emit(frame, origin);
+                    echo::category("isobus.niu.router")
+                        .debug("no translation for destination ", destination, " - blocking");
+                    return;
+                }
+            }
+
+            if (translated_source == INVALID_ADDRESS) {
+                // Source not in translation table - forward without translation
+                echo::category("isobus.niu.router")
+                    .debug("no translation for source ", source, " - forwarding as-is");
+                forward(frame, origin);
+            } else {
+                // Create translated frame
+                Frame translated_frame = frame;
+                translated_frame.set_source(translated_source);
+                if (!frame.is_broadcast() && translated_dest != INVALID_ADDRESS) {
+                    translated_frame.set_destination(translated_dest);
+                }
+
+                forward(translated_frame, origin);
+                echo::category("isobus.niu.router")
+                    .debug("translated and forwarded: src ", source, "->", translated_source);
+            }
+
+            ++forwarded_count_;
+            on_forwarded.emit(frame, origin);
+
+            if (policy == ForwardPolicy::Monitor) {
+                on_monitored.emit(frame, origin);
+            }
+        }
+    };
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // Gateway NIU (ISO 11783-4, Section 6.4)
+    // ═════════════════════════════════════════════════════════════════════════════
+    // A Gateway extends Router functionality with message repackaging and protocol
+    // translation capabilities. Like Router, it maintains separate address spaces
+    // and performs address translation.
+    //
+    // Additional features beyond Router:
+    // - Message repackaging (change message structure)
+    // - Protocol translation (e.g., CAN 2.0B <-> CAN FD)
+    // - Data transformation callbacks
+    // - Bidirectional message mapping
+    //
+    // Use cases:
+    // - Protocol bridging between different CAN versions
+    // - Message format translation
+    // - Data unit conversion (imperial <-> metric)
+    // - Custom message transformations
+    //
+    using MessageTransformFn = dp::Function<dp::Optional<Message>(const Message &)>;
+
+    class GatewayNIU : public RouterNIU {
+        dp::Map<PGN, MessageTransformFn> tractor_transforms_;   // Tractor->Implement transforms
+        dp::Map<PGN, MessageTransformFn> implement_transforms_; // Implement->Tractor transforms
+
+      public:
+        explicit GatewayNIU(NIUConfig config = {}) : RouterNIU(std::move(config)) {}
+
+        // ─── Initialize gateway ──────────────────────────────────────────────────
+        Result<void> initialize() {
+            echo::category("isobus.niu.gateway")
+                .info("Gateway NIU initialized with address translation and message repackaging");
+            return start();
+        }
+
+        // ─── Register message transforms ─────────────────────────────────────────
+        void register_tractor_transform(PGN pgn, MessageTransformFn transform) {
+            tractor_transforms_[pgn] = std::move(transform);
+            echo::category("isobus.niu.gateway").debug("registered tractor->implement transform for PGN ", pgn);
+        }
+
+        void register_implement_transform(PGN pgn, MessageTransformFn transform) {
+            implement_transforms_[pgn] = std::move(transform);
+            echo::category("isobus.niu.gateway").debug("registered implement->tractor transform for PGN ", pgn);
+        }
+
+        // ─── Process with repackaging ────────────────────────────────────────────
+        void process_tractor_frame(const Frame &frame) {
+            process_and_repackage(frame, Side::Tractor, tractor_transforms_);
+        }
+
+        void process_implement_frame(const Frame &frame) {
+            process_and_repackage(frame, Side::Implement, implement_transforms_);
+        }
+
+      private:
+        void process_and_repackage(const Frame &frame, Side origin,
+                                   const dp::Map<PGN, MessageTransformFn> &transforms) {
+            if (!state_.is(NIUState::Active)) {
+                return;
+            }
+
+            PGN pgn = frame.pgn();
+            Address source = frame.source();
+            Address destination = frame.destination();
+
+            // Resolve filtering policy
+            auto [policy, rate_limited] = resolve_policy_ex(pgn, source, destination, frame.is_broadcast(), origin);
+
+            if (rate_limited || policy == ForwardPolicy::Block) {
+                ++blocked_count_;
+                on_blocked.emit(frame, origin);
+                return;
+            }
+
+            // Check for message transform
+            auto transform_it = transforms.find(pgn);
+            if (transform_it != transforms.end()) {
+                // Apply message transformation
+                Message msg = Message::from_frame(frame);
+                auto transformed = transform_it->second(msg);
+
+                if (transformed.has_value()) {
+                    // Create frame from transformed message
+                    Frame transformed_frame = transformed.value().to_frame();
+
+                    // Still need address translation
+                    Address translated_source = translation_db().translate(source, origin);
+                    Address translated_dest = INVALID_ADDRESS;
+
+                    if (!transformed_frame.is_broadcast()) {
+                        translated_dest = translation_db().translate(destination, origin);
+                    }
+
+                    if (translated_source != INVALID_ADDRESS) {
+                        transformed_frame.set_source(translated_source);
+                    }
+                    if (translated_dest != INVALID_ADDRESS) {
+                        transformed_frame.set_destination(translated_dest);
+                    }
+
+                    forward(transformed_frame, origin);
+                    echo::category("isobus.niu.gateway").debug("repackaged and forwarded PGN ", pgn);
+                } else {
+                    // Transform returned nullopt - block message
+                    ++blocked_count_;
+                    on_blocked.emit(frame, origin);
+                    echo::category("isobus.niu.gateway").debug("transform blocked PGN ", pgn);
+                    return;
+                }
+            } else {
+                // No transform - use standard Router behavior
+                RouterNIU::process_and_translate(frame, origin);
+                return;
+            }
+
+            ++forwarded_count_;
+            on_forwarded.emit(frame, origin);
+
+            if (policy == ForwardPolicy::Monitor) {
+                on_monitored.emit(frame, origin);
+            }
+        }
+    };
 } // namespace agrobus::net
