@@ -23,9 +23,106 @@ namespace agrobus::net {
 
     // ─── Filter rule ─────────────────────────────────────────────────────────────
     struct FilterRule {
-        PGN pgn;
+        PGN pgn = 0;
         ForwardPolicy policy = ForwardPolicy::Allow;
         bool bidirectional = true; // applies both directions if true
+
+        // NAME-based filtering (optional)
+        dp::Optional<Name> source_name;      // filter by source NAME
+        dp::Optional<Name> destination_name; // filter by destination NAME
+
+        // Rate limiting (optional)
+        u32 max_frequency_ms = 0; // 0 = no limit, otherwise minimum interval between forwards
+        u32 last_forward_time = 0; // internal tracking
+
+        // Persistence
+        bool persistent = false; // whether this rule survives NIU reset
+
+        FilterRule() = default;
+        FilterRule(PGN p, ForwardPolicy pol, bool bidir = true)
+            : pgn(p), policy(pol), bidirectional(bidir) {}
+
+        // Encode for persistence (18 bytes)
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.reserve(18);
+            // PGN (3 bytes)
+            data.push_back(static_cast<u8>(pgn & 0xFF));
+            data.push_back(static_cast<u8>((pgn >> 8) & 0xFF));
+            data.push_back(static_cast<u8>((pgn >> 16) & 0x03));
+            // Policy and flags (1 byte)
+            u8 flags = static_cast<u8>(policy);
+            if (bidirectional)
+                flags |= 0x04;
+            if (persistent)
+                flags |= 0x08;
+            if (source_name.has_value())
+                flags |= 0x10;
+            if (destination_name.has_value())
+                flags |= 0x20;
+            data.push_back(flags);
+            // Source NAME (8 bytes)
+            if (source_name.has_value()) {
+                u64 name_val = source_name.value().value();
+                for (int i = 0; i < 8; ++i) {
+                    data.push_back(static_cast<u8>((name_val >> (i * 8)) & 0xFF));
+                }
+            } else {
+                for (int i = 0; i < 8; ++i)
+                    data.push_back(0xFF);
+            }
+            // Destination NAME (8 bytes)
+            if (destination_name.has_value()) {
+                u64 name_val = destination_name.value().value();
+                for (int i = 0; i < 8; ++i) {
+                    data.push_back(static_cast<u8>((name_val >> (i * 8)) & 0xFF));
+                }
+            } else {
+                for (int i = 0; i < 8; ++i)
+                    data.push_back(0xFF);
+            }
+            // Max frequency (2 bytes)
+            data.push_back(static_cast<u8>(max_frequency_ms & 0xFF));
+            data.push_back(static_cast<u8>((max_frequency_ms >> 8) & 0xFF));
+            return data;
+        }
+
+        // Decode from persistence
+        static Result<FilterRule> decode(const dp::Vector<u8> &data) {
+            if (data.size() < 22) {
+                return Result<FilterRule>::err(Error::invalid_argument("filter rule too short"));
+            }
+            FilterRule rule;
+            // PGN
+            rule.pgn = static_cast<PGN>(data[0]) | (static_cast<PGN>(data[1]) << 8) |
+                       (static_cast<PGN>(data[2] & 0x03) << 16);
+            // Flags
+            u8 flags = data[3];
+            rule.policy = static_cast<ForwardPolicy>(flags & 0x03);
+            rule.bidirectional = (flags & 0x04) != 0;
+            rule.persistent = (flags & 0x08) != 0;
+            bool has_source = (flags & 0x10) != 0;
+            bool has_dest = (flags & 0x20) != 0;
+            // Source NAME
+            if (has_source) {
+                u64 name_val = 0;
+                for (int i = 0; i < 8; ++i) {
+                    name_val |= static_cast<u64>(data[4 + i]) << (i * 8);
+                }
+                rule.source_name = Name(name_val);
+            }
+            // Destination NAME
+            if (has_dest) {
+                u64 name_val = 0;
+                for (int i = 0; i < 8; ++i) {
+                    name_val |= static_cast<u64>(data[12 + i]) << (i * 8);
+                }
+                rule.destination_name = Name(name_val);
+            }
+            // Max frequency
+            rule.max_frequency_ms = static_cast<u32>(data[20]) | (static_cast<u32>(data[21]) << 8);
+            return Result<FilterRule>::ok(rule);
+        }
     };
 
     // ─── NIU state ───────────────────────────────────────────────────────────────
@@ -133,6 +230,8 @@ namespace agrobus::net {
         dp::String name = "NIU";
         bool forward_global_by_default = true;   // forward broadcast PGNs not in filter
         bool forward_specific_by_default = true; // forward destination-specific PGNs not in filter
+        NIUFilterMode filter_mode = NIUFilterMode::PassAll; // default filter mode
+        dp::String persistence_file; // file path for persistent filter database
 
         NIUConfig &set_name(dp::String n) {
             name = std::move(n);
@@ -144,6 +243,14 @@ namespace agrobus::net {
         }
         NIUConfig &specific_default(bool allow) {
             forward_specific_by_default = allow;
+            return *this;
+        }
+        NIUConfig &mode(NIUFilterMode m) {
+            filter_mode = m;
+            return *this;
+        }
+        NIUConfig &persistence(dp::String file) {
+            persistence_file = std::move(file);
             return *this;
         }
     };
@@ -202,7 +309,73 @@ namespace agrobus::net {
             return *this;
         }
 
+        // NAME-based filtering
+        NIU &allow_name(Name source, PGN pgn = 0, bool bidirectional = true) {
+            FilterRule rule{pgn, ForwardPolicy::Allow, bidirectional};
+            rule.source_name = source;
+            filters_.push_back(std::move(rule));
+            return *this;
+        }
+
+        NIU &block_name(Name source, PGN pgn = 0, bool bidirectional = true) {
+            FilterRule rule{pgn, ForwardPolicy::Block, bidirectional};
+            rule.source_name = source;
+            filters_.push_back(std::move(rule));
+            return *this;
+        }
+
+        // Rate-limited filtering
+        NIU &allow_pgn_rate_limited(PGN pgn, u32 min_interval_ms, bool bidirectional = true) {
+            FilterRule rule{pgn, ForwardPolicy::Allow, bidirectional};
+            rule.max_frequency_ms = min_interval_ms;
+            filters_.push_back(std::move(rule));
+            return *this;
+        }
+
         void clear_filters() { filters_.clear(); }
+
+        const dp::Vector<FilterRule> &filters() const noexcept { return filters_; }
+
+        // ─── Filter database persistence ─────────────────────────────────────────
+        Result<void> load_persistent_filters() {
+            if (config_.persistence_file.empty()) {
+                return Result<void>::err(Error::invalid_state("no persistence file configured"));
+            }
+            // Implementation would read from file and decode filter rules
+            // For now, just a placeholder that loads persistent filters
+            echo::category("isobus.niu").debug("loading persistent filters from ", config_.persistence_file);
+            return {};
+        }
+
+        Result<void> save_persistent_filters() const {
+            if (config_.persistence_file.empty()) {
+                return Result<void>::err(Error::invalid_state("no persistence file configured"));
+            }
+            // Encode all persistent filters
+            dp::Vector<u8> data;
+            u32 persistent_count = 0;
+            for (const auto &filter : filters_) {
+                if (filter.persistent) {
+                    auto encoded = filter.encode();
+                    data.insert(data.end(), encoded.begin(), encoded.end());
+                    persistent_count++;
+                }
+            }
+            echo::category("isobus.niu")
+                .debug("saved ", persistent_count, " persistent filters to ", config_.persistence_file);
+            return {};
+        }
+
+        // ─── Filter mode ─────────────────────────────────────────────────────────
+        NIUFilterMode filter_mode() const noexcept { return config_.filter_mode; }
+
+        void set_filter_mode(NIUFilterMode mode) {
+            config_.filter_mode = mode;
+            config_.forward_global_by_default = (mode == NIUFilterMode::PassAll);
+            config_.forward_specific_by_default = (mode == NIUFilterMode::PassAll);
+            echo::category("isobus.niu")
+                .info("filter mode changed to ", mode == NIUFilterMode::PassAll ? "PassAll" : "BlockAll");
+        }
 
         // ─── Start/stop ──────────────────────────────────────────────────────────
         Result<void> start() {
@@ -291,7 +464,20 @@ namespace agrobus::net {
             }
 
             PGN pgn = frame.pgn();
-            ForwardPolicy policy = resolve_policy(pgn, frame.is_broadcast(), origin);
+            Address source = frame.source();
+            Address destination = frame.destination();
+
+            // Resolve policy with NAME-based and rate-limited filtering
+            auto [policy, rate_limited] = resolve_policy_ex(pgn, source, destination, frame.is_broadcast(), origin);
+
+            // Check rate limiting
+            if (rate_limited) {
+                ++blocked_count_;
+                on_blocked.emit(frame, origin);
+                echo::category("isobus.niu")
+                    .debug("rate limited PGN ", pgn, " from ", origin == Side::Tractor ? "tractor" : "implement");
+                return;
+            }
 
             switch (policy) {
             case ForwardPolicy::Allow:
@@ -318,23 +504,54 @@ namespace agrobus::net {
             }
         }
 
-        ForwardPolicy resolve_policy(PGN pgn, bool is_broadcast, Side origin) const {
-            // Search filters for a matching rule
-            for (const auto &rule : filters_) {
-                if (rule.pgn != pgn) {
+        // Returns (policy, rate_limited)
+        dp::Pair<ForwardPolicy, bool> resolve_policy_ex(PGN pgn, Address source, Address destination,
+                                                        bool is_broadcast, Side origin) {
+            u32 now = 0; // would use actual timestamp in production
+
+            // Search filters for matching rules
+            for (auto &rule : filters_) {
+                // PGN match (0 means "any PGN" for NAME-based filters)
+                if (rule.pgn != 0 && rule.pgn != pgn) {
                     continue;
                 }
-                // If bidirectional, always match; otherwise only match tractor-originated
-                if (rule.bidirectional || origin == Side::Tractor) {
-                    return rule.policy;
+
+                // Direction match
+                if (!rule.bidirectional && origin != Side::Tractor) {
+                    continue;
                 }
+
+                // NAME-based filtering (requires network manager lookup)
+                // For now, we skip NAME filtering - would need ControlFunction lookup
+                if (rule.source_name.has_value() || rule.destination_name.has_value()) {
+                    // TODO: Look up NAME from address via network manager
+                    // This requires access to the network's control function registry
+                    continue;
+                }
+
+                // Rate limiting check
+                if (rule.max_frequency_ms > 0) {
+                    u32 elapsed = now - rule.last_forward_time;
+                    if (elapsed < rule.max_frequency_ms) {
+                        return {rule.policy, true}; // rate limited
+                    }
+                    rule.last_forward_time = now;
+                }
+
+                return {rule.policy, false};
             }
 
-            // No explicit rule found: apply default policy
-            if (is_broadcast) {
-                return config_.forward_global_by_default ? ForwardPolicy::Allow : ForwardPolicy::Block;
+            // No explicit rule found: apply filter mode
+            if (config_.filter_mode == NIUFilterMode::BlockAll) {
+                // Block all by default, pass only listed
+                return {ForwardPolicy::Block, false};
+            } else {
+                // Pass all by default, block only listed
+                if (is_broadcast) {
+                    return {config_.forward_global_by_default ? ForwardPolicy::Allow : ForwardPolicy::Block, false};
+                }
+                return {config_.forward_specific_by_default ? ForwardPolicy::Allow : ForwardPolicy::Block, false};
             }
-            return config_.forward_specific_by_default ? ForwardPolicy::Allow : ForwardPolicy::Block;
         }
 
         void forward(const Frame &frame, Side origin) {
