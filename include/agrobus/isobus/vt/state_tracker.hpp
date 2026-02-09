@@ -20,6 +20,28 @@ namespace agrobus::isobus::vt {
         u32 value = 0;
     };
 
+    // ─── Alarm Priority Levels ──────────────────────────────────────────────────
+    enum class AlarmPriority : u8 {
+        Critical = 0,  // Highest priority
+        Warning = 1,   // Medium priority
+        Information = 2 // Lowest priority
+    };
+
+    // ─── Active Alarm Entry ────────────────────────────────────────────────────
+    struct AlarmEntry {
+        ObjectID alarm_mask_id = 0xFFFF;
+        AlarmPriority priority = AlarmPriority::Information;
+        u32 activation_timestamp_ms = 0;
+
+        bool operator<(const AlarmEntry &other) const {
+            // Higher priority (lower number) comes first
+            if (priority != other.priority)
+                return static_cast<u8>(priority) < static_cast<u8>(other.priority);
+            // If same priority, older alarm comes first
+            return activation_timestamp_ms < other.activation_timestamp_ms;
+        }
+    };
+
     // ─── VT Client State Tracker ──────────────────────────────────────────────────
     // Maintains a local mirror of VT state by observing VT-to-ECU messages.
     // Tracks: active masks, numeric/string values, visibility, enable states,
@@ -42,6 +64,10 @@ namespace agrobus::isobus::vt {
         dp::Map<ObjectID, bool> visibility_;
         dp::Map<ObjectID, bool> enable_state_;
         dp::Map<ObjectID, ObjectID> soft_key_mask_assignments_; // data mask -> soft key mask
+
+        // ─── Alarm Priority Stack ─────────────────────────────────────────────────
+        dp::Vector<AlarmEntry> active_alarms_; // Sorted by priority (highest first)
+        dp::Map<ObjectID, AlarmPriority> alarm_priorities_; // Cached priorities from pool
 
         u8 vt_busy_code_ = 0;
         u8 vt_function_code_ = 0xFF;
@@ -98,6 +124,105 @@ namespace agrobus::isobus::vt {
             return dp::nullopt;
         }
 
+        // ─── Alarm Priority Stack Management ──────────────────────────────────────
+        // Register an alarm mask's priority (typically done during pool upload)
+        void register_alarm_priority(ObjectID alarm_mask_id, AlarmPriority priority) {
+            alarm_priorities_[alarm_mask_id] = priority;
+        }
+
+        // Activate an alarm and add it to the priority stack
+        void activate_alarm(ObjectID alarm_mask_id, u32 timestamp_ms = 0) {
+            // Check if already active
+            for (const auto &alarm : active_alarms_) {
+                if (alarm.alarm_mask_id == alarm_mask_id)
+                    return; // Already active
+            }
+
+            // Get priority (default to Information if not registered)
+            AlarmPriority priority = AlarmPriority::Information;
+            auto it = alarm_priorities_.find(alarm_mask_id);
+            if (it != alarm_priorities_.end()) {
+                priority = it->second;
+            }
+
+            // Create alarm entry
+            AlarmEntry entry;
+            entry.alarm_mask_id = alarm_mask_id;
+            entry.priority = priority;
+            entry.activation_timestamp_ms = timestamp_ms;
+
+            // Insert in priority order
+            active_alarms_.push_back(entry);
+            sort_alarm_stack();
+
+            // Update active alarm mask to highest priority
+            if (!active_alarms_.empty()) {
+                active_alarm_mask_ = active_alarms_[0].alarm_mask_id;
+                on_alarm_activated.emit(alarm_mask_id, priority);
+                echo::category("isobus.vt.tracker")
+                    .info("alarm activated: id=", alarm_mask_id, " priority=", static_cast<u32>(priority));
+            }
+        }
+
+        // Deactivate (acknowledge) the highest priority alarm
+        void acknowledge_alarm() {
+            if (active_alarms_.empty())
+                return;
+
+            ObjectID deactivated_id = active_alarms_[0].alarm_mask_id;
+            active_alarms_.erase(active_alarms_.begin());
+
+            // Update active alarm mask to next highest priority (or none)
+            if (!active_alarms_.empty()) {
+                active_alarm_mask_ = active_alarms_[0].alarm_mask_id;
+            } else {
+                active_alarm_mask_ = 0xFFFF;
+            }
+
+            on_alarm_deactivated.emit(deactivated_id);
+            echo::category("isobus.vt.tracker").info("alarm acknowledged: id=", deactivated_id);
+        }
+
+        // Deactivate a specific alarm by ID
+        void deactivate_alarm(ObjectID alarm_mask_id) {
+            auto it = active_alarms_.begin();
+            while (it != active_alarms_.end()) {
+                if (it->alarm_mask_id == alarm_mask_id) {
+                    active_alarms_.erase(it);
+                    on_alarm_deactivated.emit(alarm_mask_id);
+                    echo::category("isobus.vt.tracker").info("alarm deactivated: id=", alarm_mask_id);
+                    break;
+                }
+                ++it;
+            }
+
+            // Update active alarm mask
+            if (!active_alarms_.empty()) {
+                active_alarm_mask_ = active_alarms_[0].alarm_mask_id;
+            } else {
+                active_alarm_mask_ = 0xFFFF;
+            }
+        }
+
+        // Get the current alarm stack (highest priority first)
+        const dp::Vector<AlarmEntry> &active_alarms() const noexcept { return active_alarms_; }
+
+        // Get the highest priority active alarm
+        dp::Optional<AlarmEntry> highest_priority_alarm() const {
+            if (active_alarms_.empty())
+                return dp::nullopt;
+            return active_alarms_[0];
+        }
+
+        // Check if a specific alarm is active
+        bool is_alarm_active(ObjectID alarm_mask_id) const {
+            for (const auto &alarm : active_alarms_) {
+                if (alarm.alarm_mask_id == alarm_mask_id)
+                    return true;
+            }
+            return false;
+        }
+
         // ─── Manual state injection (for testing or initial sync) ─────────────────
         void set_numeric_value(ObjectID id, u32 value) { numeric_values_[id] = value; }
         void set_string_value(ObjectID id, dp::String value) { string_values_[id] = std::move(value); }
@@ -113,6 +238,8 @@ namespace agrobus::isobus::vt {
             visibility_.clear();
             enable_state_.clear();
             soft_key_mask_assignments_.clear();
+            active_alarms_.clear();
+            alarm_priorities_.clear();
             vt_busy_code_ = 0;
             vt_address_ = NULL_ADDRESS;
         }
@@ -123,6 +250,8 @@ namespace agrobus::isobus::vt {
         Event<ObjectID, const dp::String &> on_string_value_changed;
         Event<ObjectID, bool> on_visibility_changed;
         Event<ObjectID, bool> on_enable_state_changed;
+        Event<ObjectID, AlarmPriority> on_alarm_activated;
+        Event<ObjectID> on_alarm_deactivated;
 
       private:
         void handle_vt_message(const Message &msg) {
@@ -236,6 +365,11 @@ namespace agrobus::isobus::vt {
                 on_active_mask_changed.emit(active_data_mask_);
                 echo::category("isobus.vt.tracker").debug("active mask changed to: ", active_data_mask_);
             }
+        }
+
+        void sort_alarm_stack() {
+            // Sort alarms by priority (highest first), then by timestamp (oldest first)
+            std::sort(active_alarms_.begin(), active_alarms_.end());
         }
     };
 

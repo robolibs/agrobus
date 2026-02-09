@@ -56,6 +56,239 @@ namespace agrobus::isobus::vt {
         GraphicContext = 40
     };
 
+    // ─── Type-Specific Object Bodies ────────────────────────────────────────────
+    // ISO 11783-6 §4.6.21: Window Mask Object (Type 34)
+    struct WindowMaskBody {
+        u8 window_type = 0; // 0=freeform, 1=numeric output, 2=list
+        u8 background_color = 0;
+        u8 options = 0; // bit 0=available for adjustment, bit 1=removable
+        ObjectID name = 0xFFFF;
+        ObjectID window_title = 0xFFFF;
+        ObjectID window_icon = 0xFFFF;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(window_type);
+            data.push_back(background_color);
+            data.push_back(options);
+            data.push_back(static_cast<u8>(name & 0xFF));
+            data.push_back(static_cast<u8>((name >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(window_title & 0xFF));
+            data.push_back(static_cast<u8>((window_title >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(window_icon & 0xFF));
+            data.push_back(static_cast<u8>((window_icon >> 8) & 0xFF));
+            return data;
+        }
+
+        static Result<WindowMaskBody> decode(const dp::Vector<u8> &body) {
+            if (body.size() < 9)
+                return Result<WindowMaskBody>::err(Error::invalid_data("Window Mask body too short"));
+
+            WindowMaskBody wm;
+            wm.window_type = body[0];
+            wm.background_color = body[1];
+            wm.options = body[2];
+            wm.name = static_cast<u16>(body[3]) | (static_cast<u16>(body[4]) << 8);
+            wm.window_title = static_cast<u16>(body[5]) | (static_cast<u16>(body[6]) << 8);
+            wm.window_icon = static_cast<u16>(body[7]) | (static_cast<u16>(body[8]) << 8);
+            return Result<WindowMaskBody>::ok(std::move(wm));
+        }
+    };
+
+    // ISO 11783-6 §4.6.22: Key Group Object (Type 35)
+    struct KeyGroupBody {
+        u8 options = 0; // bit 0=available, bit 1=transparent
+        ObjectID name = 0xFFFF;
+        ObjectID key_group_icon = 0xFFFF;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(options);
+            data.push_back(static_cast<u8>(name & 0xFF));
+            data.push_back(static_cast<u8>((name >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(key_group_icon & 0xFF));
+            data.push_back(static_cast<u8>((key_group_icon >> 8) & 0xFF));
+            return data;
+        }
+
+        static Result<KeyGroupBody> decode(const dp::Vector<u8> &body) {
+            if (body.size() < 5)
+                return Result<KeyGroupBody>::err(Error::invalid_data("Key Group body too short"));
+
+            KeyGroupBody kg;
+            kg.options = body[0];
+            kg.name = static_cast<u16>(body[1]) | (static_cast<u16>(body[2]) << 8);
+            kg.key_group_icon = static_cast<u16>(body[3]) | (static_cast<u16>(body[4]) << 8);
+            return Result<KeyGroupBody>::ok(std::move(kg));
+        }
+    };
+
+    // ISO 11783-6 §4.6.7: Key Object (Type 5)
+    struct KeyBody {
+        u8 background_color = 0;
+        u8 key_code = 0;
+        u8 options = 0; // bit 0=latchable
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(background_color);
+            data.push_back(key_code);
+            data.push_back(options);
+            return data;
+        }
+
+        static Result<KeyBody> decode(const dp::Vector<u8> &body) {
+            if (body.size() < 3)
+                return Result<KeyBody>::err(Error::invalid_data("Key body too short"));
+
+            KeyBody k;
+            k.background_color = body[0];
+            k.key_code = body[1];
+            k.options = body[2];
+            return Result<KeyBody>::ok(std::move(k));
+        }
+    };
+
+    // ISO 11783-6 §4.6.30: Macro Object (Type 28)
+    struct MacroCommand {
+        u8 command_type = 0;
+        dp::Vector<u8> parameters;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(command_type);
+            for (auto p : parameters)
+                data.push_back(p);
+            return data;
+        }
+
+        // Get the total length of a VT command (including command byte)
+        // Returns 0 for unknown/variable-length commands
+        static u16 get_command_length(u8 cmd) {
+            switch (cmd) {
+            case 0xA0: return 6;  // Hide/Show
+            case 0xA1: return 5;  // Enable/Disable
+            case 0xA2: return 2;  // Select Active Working Set
+            case 0xA3: return 4;  // Control Audio Signal
+            case 0xA4: return 8;  // Change Size
+            case 0xA5: return 4;  // Change Background Colour
+            case 0xA6: return 7;  // Change Child Location
+            case 0xA7: return 9;  // Change Child Position
+            case 0xA8: return 8;  // Change Numeric Value
+            case 0xA9: return 3;  // Set Audio Volume
+            case 0xAD: return 4;  // Change Active Mask
+            case 0xAE: return 5;  // Change Soft Key Mask
+            case 0xAF: return 8;  // Change Attribute
+            case 0xB0: return 6;  // Change List Item
+            case 0xB1: return 5;  // Change Fill Attributes
+            case 0xB2: return 5;  // Change Font Attributes
+            case 0xB3: return 0;  // Change String Value (variable length)
+            case 0xB4: return 4;  // Change Priority
+            case 0xB5: return 9;  // Change End Point
+            case 0xBD: return 5;  // Lock/Unlock Mask
+            case 0xBE: return 2;  // Execute Macro
+            default: return 0;    // Unknown or variable length
+            }
+        }
+    };
+
+    struct MacroBody {
+        dp::Vector<MacroCommand> commands;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            // Macro commands are serialized sequentially
+            for (const auto &cmd : commands) {
+                auto cmd_data = cmd.encode();
+                data.insert(data.end(), cmd_data.begin(), cmd_data.end());
+            }
+            return data;
+        }
+
+        static Result<MacroBody> decode(const dp::Vector<u8> &body) {
+            MacroBody mb;
+            usize offset = 0;
+
+            while (offset < body.size()) {
+                if (offset + 1 > body.size())
+                    break; // Not enough data for command byte
+
+                MacroCommand cmd;
+                cmd.command_type = body[offset];
+                offset++;
+
+                // Get command length (excluding command byte)
+                u16 cmd_len = MacroCommand::get_command_length(cmd.command_type);
+
+                if (cmd_len == 0) {
+                    // Variable length or unknown command - try to parse or skip
+                    if (cmd.command_type == 0xB3) { // Change String Value
+                        // Format: [cmd][obj_id_lo][obj_id_hi][len_lo][len_hi][string...]
+                        if (offset + 4 > body.size())
+                            return Result<MacroBody>::err(Error::invalid_data("incomplete Change String Value in macro"));
+                        u16 str_len = static_cast<u16>(body[offset + 2]) | (static_cast<u16>(body[offset + 3]) << 8);
+                        u16 total_len = 4 + str_len;
+                        if (offset + total_len > body.size())
+                            return Result<MacroBody>::err(Error::invalid_data("string data exceeds macro body"));
+                        for (u16 i = 0; i < total_len; ++i)
+                            cmd.parameters.push_back(body[offset + i]);
+                        offset += total_len;
+                    } else {
+                        // Unknown command - cannot safely parse further
+                        return Result<MacroBody>::err(
+                            Error::invalid_data("unknown or variable-length macro command 0x" +
+                                                dp::String(std::to_string(cmd.command_type))));
+                    }
+                } else {
+                    // Fixed-length command - copy parameters
+                    u16 param_len = cmd_len - 1; // Exclude command byte
+                    if (offset + param_len > body.size())
+                        return Result<MacroBody>::err(Error::invalid_data("macro command parameters exceed body"));
+                    for (u16 i = 0; i < param_len; ++i)
+                        cmd.parameters.push_back(body[offset + i]);
+                    offset += param_len;
+                }
+
+                mb.commands.push_back(std::move(cmd));
+            }
+
+            return Result<MacroBody>::ok(std::move(mb));
+        }
+    };
+
+    // ISO 11783-6 §4.6.3: Alarm Mask Object (Type 2) - with priority extension
+    struct AlarmMaskBody {
+        u8 background_color = 0;
+        ObjectID soft_key_mask = 0xFFFF;
+        u8 priority = 0; // 0=Critical (highest), 1=Warning, 2=Information (lowest)
+        u8 acoustic_signal = 0;
+        u8 options = 0;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(background_color);
+            data.push_back(static_cast<u8>(soft_key_mask & 0xFF));
+            data.push_back(static_cast<u8>((soft_key_mask >> 8) & 0xFF));
+            data.push_back(priority);
+            data.push_back(acoustic_signal);
+            data.push_back(options);
+            return data;
+        }
+
+        static Result<AlarmMaskBody> decode(const dp::Vector<u8> &body) {
+            if (body.size() < 6)
+                return Result<AlarmMaskBody>::err(Error::invalid_data("Alarm Mask body too short"));
+
+            AlarmMaskBody am;
+            am.background_color = body[0];
+            am.soft_key_mask = static_cast<u16>(body[1]) | (static_cast<u16>(body[2]) << 8);
+            am.priority = body[3];
+            am.acoustic_signal = body[4];
+            am.options = body[5];
+            return Result<AlarmMaskBody>::ok(std::move(am));
+        }
+    };
+
     // ─── VT Object ───────────────────────────────────────────────────────────────
     // Serialized format (length-driven):
     //   [0..1] Object ID (LE)
@@ -96,6 +329,62 @@ namespace agrobus::isobus::vt {
         VTObject &add_child(ObjectID v) {
             children.push_back(v);
             return *this;
+        }
+
+        // ─── Type-Specific Body Helpers ───────────────────────────────────────────
+        VTObject &set_window_mask_body(const WindowMaskBody &wm) {
+            body = wm.encode();
+            return *this;
+        }
+
+        VTObject &set_key_group_body(const KeyGroupBody &kg) {
+            body = kg.encode();
+            return *this;
+        }
+
+        VTObject &set_key_body(const KeyBody &k) {
+            body = k.encode();
+            return *this;
+        }
+
+        VTObject &set_macro_body(const MacroBody &m) {
+            body = m.encode();
+            return *this;
+        }
+
+        VTObject &set_alarm_mask_body(const AlarmMaskBody &am) {
+            body = am.encode();
+            return *this;
+        }
+
+        Result<WindowMaskBody> get_window_mask_body() const {
+            if (type != ObjectType::WindowMask)
+                return Result<WindowMaskBody>::err(Error::invalid_data("object is not a Window Mask"));
+            return WindowMaskBody::decode(body);
+        }
+
+        Result<KeyGroupBody> get_key_group_body() const {
+            if (type != ObjectType::KeyGroup)
+                return Result<KeyGroupBody>::err(Error::invalid_data("object is not a Key Group"));
+            return KeyGroupBody::decode(body);
+        }
+
+        Result<KeyBody> get_key_body() const {
+            if (type != ObjectType::Key)
+                return Result<KeyBody>::err(Error::invalid_data("object is not a Key"));
+            return KeyBody::decode(body);
+        }
+
+        Result<MacroBody> get_macro_body() const {
+            if (type != ObjectType::Macro)
+                return Result<MacroBody>::err(Error::invalid_data("object is not a Macro"));
+            return MacroBody::decode(body);
+        }
+
+        Result<AlarmMaskBody> get_alarm_mask_body() const {
+            if (type != ObjectType::AlarmMask)
+                return Result<AlarmMaskBody>::err(Error::invalid_data("object is not an Alarm Mask"));
+            return AlarmMaskBody::decode(body);
         }
 
         dp::Vector<u8> serialize() const {
@@ -270,5 +559,36 @@ namespace agrobus::isobus::vt {
             return *this;
         }
     };
+
+    // ─── Object Builder Helpers ─────────────────────────────────────────────────
+    inline VTObject create_window_mask(ObjectID id, const WindowMaskBody &body) {
+        VTObject obj;
+        obj.set_id(id).set_type(ObjectType::WindowMask).set_window_mask_body(body);
+        return obj;
+    }
+
+    inline VTObject create_key_group(ObjectID id, const KeyGroupBody &body) {
+        VTObject obj;
+        obj.set_id(id).set_type(ObjectType::KeyGroup).set_key_group_body(body);
+        return obj;
+    }
+
+    inline VTObject create_key(ObjectID id, const KeyBody &body) {
+        VTObject obj;
+        obj.set_id(id).set_type(ObjectType::Key).set_key_body(body);
+        return obj;
+    }
+
+    inline VTObject create_macro(ObjectID id, const MacroBody &body) {
+        VTObject obj;
+        obj.set_id(id).set_type(ObjectType::Macro).set_macro_body(body);
+        return obj;
+    }
+
+    inline VTObject create_alarm_mask(ObjectID id, const AlarmMaskBody &body) {
+        VTObject obj;
+        obj.set_id(id).set_type(ObjectType::AlarmMask).set_alarm_mask_body(body);
+        return obj;
+    }
 
 } // namespace agrobus::isobus::vt
