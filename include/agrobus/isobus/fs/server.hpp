@@ -93,6 +93,7 @@ namespace agrobus::isobus::fs {
         // File system state
         dp::Map<dp::String, dp::Vector<u8>> files_;  // path -> data
         dp::Map<dp::String, FileAttributes> file_attrs_;  // path -> attributes
+        dp::Vector<dp::String> directories_;  // List of directories
         dp::Vector<OpenFile> open_files_;
         FileHandle next_handle_ = 1;
 
@@ -123,6 +124,9 @@ namespace agrobus::isobus::fs {
             properties_.supports_file_attributes = true;
             properties_.supports_move_file = true;
             properties_.supports_delete_file = true;
+
+            // Initialize root directory
+            directories_.push_back("\\");
         }
 
         // ─── Initialization ──────────────────────────────────────────────────────
@@ -154,6 +158,75 @@ namespace agrobus::isobus::fs {
                 return {};
             }
             return Result<void>::err(Error::invalid_state("file not found"));
+        }
+
+        // ─── Directory Management ────────────────────────────────────────────────
+        Result<void> add_directory(dp::String path) {
+            if (!path.empty() && path.back() != '\\') {
+                path += '\\';
+            }
+            directories_.push_back(path);
+            echo::category("isobus.fs.server").debug("Directory added: ", path);
+            return {};
+        }
+
+        bool directory_exists(const dp::String &path) const {
+            for (const auto &dir : directories_) {
+                if (dir == path) return true;
+            }
+            return false;
+        }
+
+        // List all files in a directory (supports wildcards)
+        dp::Vector<FileEntry> list_directory(const dp::String &path, const dp::String &pattern = "*") {
+            dp::Vector<FileEntry> entries;
+
+            // List files
+            for (const auto &[file_path, data] : files_) {
+                // Check if file is in the specified directory
+                if (file_path.find(path) == 0) {
+                    // Extract filename from path
+                    auto filename = file_path.substr(path.size());
+
+                    // Check wildcard match
+                    if (pattern != "*" && !wildcard_match(filename, pattern)) {
+                        continue;
+                    }
+
+                    FileEntry entry;
+                    entry.name = filename;
+                    entry.size = data.size();
+                    entry.attributes = file_attrs_.count(file_path) ? file_attrs_.at(file_path) : FileAttributes::None;
+                    entry.date = pack_dos_date(2025, 1, 1);
+                    entry.time = pack_dos_time(12, 0, 0);
+                    entries.push_back(entry);
+                }
+            }
+
+            // List subdirectories
+            for (const auto &dir : directories_) {
+                if (dir == path) continue;  // Skip self
+
+                if (dir.find(path) == 0 && dir.size() > path.size()) {
+                    auto subdir = dir.substr(path.size());
+
+                    // Only include immediate subdirectories
+                    auto next_slash = subdir.find('\\');
+                    if (next_slash != dp::String::npos && next_slash < subdir.size() - 1) {
+                        continue;  // This is a nested subdirectory
+                    }
+
+                    FileEntry entry;
+                    entry.name = subdir;
+                    entry.size = 0;
+                    entry.attributes = FileAttributes::Directory;
+                    entry.date = pack_dos_date(2025, 1, 1);
+                    entry.time = pack_dos_time(12, 0, 0);
+                    entries.push_back(entry);
+                }
+            }
+
+            return entries;
         }
 
         // ─── Server Properties ───────────────────────────────────────────────────
@@ -289,6 +362,12 @@ namespace agrobus::isobus::fs {
                 case FSFunction::FileServerStatus:
                     return handle_get_status(client, tan);
 
+                case FSFunction::GetCurrentDirectory:
+                    return handle_get_current_directory(client, tan);
+
+                case FSFunction::ChangeDirectory:
+                    return handle_change_directory(client, tan, request);
+
                 default:
                     echo::category("isobus.fs.server").warn(
                         "Unsupported function: ", static_cast<u32>(function_code)
@@ -314,6 +393,10 @@ namespace agrobus::isobus::fs {
 
             dp::String path(reinterpret_cast<const char*>(request.data() + 4), path_len);
 
+            // Check if opening a directory
+            auto access_mode = get_access_mode(flags);
+            bool is_dir_listing = (access_mode == OpenFlags::OpenDir);
+
             // Check client file limit
             auto &conn = clients_[client];
             if (conn.open_handles.size() >= config_.max_open_files_per_client) {
@@ -327,16 +410,30 @@ namespace agrobus::isobus::fs {
                                              tan, FSError::MaxHandles);
             }
 
-            // Check if file exists
-            if (files_.find(path) == files_.end()) {
-                if (!has_flag(flags, OpenFlags::Create)) {
+            // Handle directory listing vs file open
+            if (is_dir_listing) {
+                // Check if directory exists
+                dp::String dir_path = path;
+                if (!dir_path.empty() && dir_path.back() != '\\') {
+                    dir_path += '\\';
+                }
+
+                if (!directory_exists(dir_path)) {
                     return encode_error_response(static_cast<u8>(FSFunction::OpenFile),
                                                  tan, FSError::NotFound);
                 }
+            } else {
+                // Check if file exists
+                if (files_.find(path) == files_.end()) {
+                    if (!has_flag(flags, OpenFlags::Create)) {
+                        return encode_error_response(static_cast<u8>(FSFunction::OpenFile),
+                                                     tan, FSError::NotFound);
+                    }
 
-                // Create new file
-                files_[path] = dp::Vector<u8>();
-                file_attrs_[path] = FileAttributes::None;
+                    // Create new file
+                    files_[path] = dp::Vector<u8>();
+                    file_attrs_[path] = FileAttributes::None;
+                }
             }
 
             // Allocate handle
@@ -351,9 +448,10 @@ namespace agrobus::isobus::fs {
             open_file.handle = handle;
             open_file.owner = client;
             open_file.path = path;
-            open_file.data = &files_[path];
+            open_file.data = is_dir_listing ? nullptr : &files_[path];
             open_file.position = 0;
             open_file.flags = flags;
+            open_file.is_directory = is_dir_listing;
             open_files_.push_back(open_file);
 
             conn.open_handles.push_back(handle);
@@ -603,7 +701,134 @@ namespace agrobus::isobus::fs {
             return response;
         }
 
+        // ─── Get Current Directory ───────────────────────────────────────────────
+        dp::Vector<u8> handle_get_current_directory(Address client, TAN tan) {
+            auto &conn = clients_[client];
+            const auto &cwd = conn.current_directory;
+
+            dp::Vector<u8> response(8, 0xFF);
+            response[0] = static_cast<u8>(FSFunction::GetCurrentDirectory);
+            response[1] = tan;
+            response[2] = static_cast<u8>(FSError::Success);
+            response[3] = static_cast<u8>(cwd.size());
+
+            // Append path (will trigger TP if needed)
+            for (usize i = 0; i < cwd.size() && i + 4 < 8; ++i) {
+                response[4 + i] = cwd[i];
+            }
+
+            echo::category("isobus.fs.server").trace(
+                "Get current directory for client ", client, ": ", cwd
+            );
+
+            return response;
+        }
+
+        // ─── Change Directory ────────────────────────────────────────────────────
+        dp::Vector<u8> handle_change_directory(Address client, TAN tan, const dp::Vector<u8> &request) {
+            if (request.size() < 3) {
+                return encode_error_response(static_cast<u8>(FSFunction::ChangeDirectory),
+                                             tan, FSError::MalformedRequest);
+            }
+
+            u8 path_len = request[2];
+            if (request.size() < 3 + path_len) {
+                return encode_error_response(static_cast<u8>(FSFunction::ChangeDirectory),
+                                             tan, FSError::MalformedRequest);
+            }
+
+            dp::String path(reinterpret_cast<const char*>(request.data() + 3), path_len);
+
+            auto &conn = clients_[client];
+
+            // Handle special paths
+            if (path == "..") {
+                // Go to parent directory
+                auto &cwd = conn.current_directory;
+                if (cwd != "\\") {
+                    // Remove last directory component
+                    auto last_slash = cwd.rfind('\\', cwd.size() - 2);
+                    if (last_slash != dp::String::npos) {
+                        cwd = cwd.substr(0, last_slash + 1);
+                    } else {
+                        cwd = "\\";
+                    }
+                }
+            } else if (path == ".") {
+                // Stay in current directory (no-op)
+            } else if (path.empty() || path == "\\") {
+                // Go to root
+                conn.current_directory = "\\";
+            } else {
+                // Absolute or relative path
+                dp::String target_path;
+                if (is_absolute_path(path)) {
+                    target_path = path;
+                } else {
+                    // Relative to current directory
+                    target_path = conn.current_directory;
+                    if (!target_path.empty() && target_path.back() != '\\') {
+                        target_path += '\\';
+                    }
+                    target_path += path;
+                }
+
+                // Ensure trailing slash
+                if (!target_path.empty() && target_path.back() != '\\') {
+                    target_path += '\\';
+                }
+
+                // Check if directory exists
+                if (!directory_exists(target_path)) {
+                    return encode_error_response(static_cast<u8>(FSFunction::ChangeDirectory),
+                                                 tan, FSError::NotFound);
+                }
+
+                conn.current_directory = target_path;
+            }
+
+            echo::category("isobus.fs.server").debug(
+                "Change directory for client ", client, " to: ", conn.current_directory
+            );
+
+            // Success response
+            dp::Vector<u8> response(8, 0xFF);
+            response[0] = static_cast<u8>(FSFunction::ChangeDirectory);
+            response[1] = tan;
+            response[2] = static_cast<u8>(FSError::Success);
+            return response;
+        }
+
         // ─── Helper Functions ────────────────────────────────────────────────────
+        bool wildcard_match(const dp::String &str, const dp::String &pattern) {
+            // Simple wildcard matching: * matches any sequence, ? matches single char
+            usize s = 0, p = 0;
+            usize star_idx = dp::String::npos, match_idx = 0;
+
+            while (s < str.size()) {
+                if (p < pattern.size() && (pattern[p] == '?' || pattern[p] == str[s])) {
+                    ++s;
+                    ++p;
+                } else if (p < pattern.size() && pattern[p] == '*') {
+                    star_idx = p;
+                    match_idx = s;
+                    ++p;
+                } else if (star_idx != dp::String::npos) {
+                    p = star_idx + 1;
+                    ++match_idx;
+                    s = match_idx;
+                } else {
+                    return false;
+                }
+            }
+
+            while (p < pattern.size() && pattern[p] == '*') {
+                ++p;
+            }
+
+            return p == pattern.size();
+        }
+
         dp::Vector<u8> encode_error_response(u8 function, TAN tan, FSError error) {
             dp::Vector<u8> response(8, 0xFF);
             response[0] = function;
