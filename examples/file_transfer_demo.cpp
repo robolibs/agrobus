@@ -33,41 +33,36 @@ int main() {
         0, 0x28).value();
 
     // Setup file server
-    fs::FileServerEnhanced server(nm, cf, fs::FileServerConfig{}.path("/isobus/data"));
+    fs::FileServerEnhanced server(nm, cf, fs::FileServerConfig{});
     server.initialize();
-    server.add_file("task_data.xml");
-    server.add_file("prescription_01.bin");
-    server.add_file("device_log.csv");
 
-    server.on_file_read_request.subscribe([](dp::String filename, Address addr) {
-        echo::info("File read request: '", filename, "' from 0x", addr);
-    });
+    // Add some test files
+    dp::Vector<u8> xml_data;
+    xml_data.push_back(0xAA);
+    xml_data.push_back(0xBB);
+    server.add_file("task_data.xml", xml_data, fs::FileAttributes::ReadOnly);
 
-    server.on_file_delete_request.subscribe([](dp::String filename, Address) {
-        echo::info("File delete request: '", filename, "'");
-    });
-
-    // List files
-    const auto& files = server.files();
-    echo::info("Files available: ", files.size());
-    for (const auto& f : files) {
-        echo::info("  - ", f.name);
+    dp::Vector<u8> bin_data;
+    for (int i = 0; i < 100; ++i) {
+        bin_data.push_back(static_cast<u8>(i));
     }
+    server.add_file("prescription_01.bin", bin_data);
+
+    dp::Vector<u8> csv_data;
+    server.add_file("device_log.csv", csv_data);
+
+    echo::info("Files available on server");
 
     // Setup file client
     fs::FileClient client(nm, cf);
     client.initialize();
 
-    client.on_file_opened.subscribe([](u8 handle) {
-        echo::info("File opened with handle: ", handle);
+    client.on_file_opened.subscribe([](u8 handle, dp::String filename) {
+        echo::info("File opened with handle: ", static_cast<int>(handle), " filename: ", filename);
     });
 
-    client.on_file_count.subscribe([](u8 count) {
-        echo::info("Server reports ", count, " files");
-    });
-
-    client.on_error.subscribe([](FileTransferError err, dp::String ctx) {
-        echo::warn("File error: ", static_cast<u8>(err), " context: ", ctx);
+    client.on_error.subscribe([](fs::FSError err) {
+        echo::warn("File error: ", static_cast<u8>(err));
     });
 
     echo::info("=== File Transfer Demo Complete ===");

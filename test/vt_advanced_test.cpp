@@ -346,19 +346,19 @@ TEST_CASE("MacroBody encode and decode") {
         // Command 1: HideShowObject
         MacroCommand cmd1;
         cmd1.command_type = 0xA0;
-        cmd1.data = {0x10, 0x00, 0x01}; // 3 bytes
+        cmd1.parameters = {0x10, 0x00, 0x01}; // 3 bytes
         body.commands.push_back(cmd1);
 
         // Command 2: ChangeActiveMask
         MacroCommand cmd2;
         cmd2.command_type = 0xA4;
-        cmd2.data = {0x20, 0x00, 0x00, 0xFF}; // 4 bytes
+        cmd2.parameters = {0x20, 0x00, 0x00, 0xFF}; // 4 bytes
         body.commands.push_back(cmd2);
 
         // Command 3: ChangePriority
         MacroCommand cmd3;
         cmd3.command_type = 0xAC;
-        cmd3.data = {0x30, 0x00, 0x02}; // 3 bytes
+        cmd3.parameters = {0x30, 0x00, 0x02}; // 3 bytes
         body.commands.push_back(cmd3);
 
         auto encoded = body.encode();
@@ -387,12 +387,12 @@ TEST_CASE("Macro object integration") {
     MacroBody body;
     MacroCommand cmd1;
     cmd1.command_type = 0xA0;
-    cmd1.data = {0x10, 0x00, 0x01};
+    cmd1.parameters = {0x10, 0x00, 0x01};
     body.commands.push_back(cmd1);
 
     MacroCommand cmd2;
     cmd2.command_type = 0xA4;
-    cmd2.data = {0x20, 0x00, 0x00, 0xFF};
+    cmd2.parameters = {0x20, 0x00, 0x00, 0xFF};
     body.commands.push_back(cmd2);
 
     macro.body = body.encode();
@@ -411,8 +411,8 @@ TEST_CASE("AlarmPriority enum") {
     CHECK(static_cast<u8>(AlarmPriority::Information) == 2);
 }
 
-TEST_CASE("VTStateTracker alarm priority stack") {
-    VTStateTracker tracker;
+TEST_CASE("VTClientStateTracker alarm priority stack") {
+    VTClientStateTracker tracker;
 
     SUBCASE("activate single alarm") {
         tracker.activate_alarm(1000, 100);

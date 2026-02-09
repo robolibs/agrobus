@@ -72,7 +72,7 @@ int main() {
     echo::info("TIM server attached");
 
     // Subscribe to power state changes
-    tecu.on_power_state_changed.subscribe([](isobus::PowerState state) {
+    tecu.on_power_state_changed.subscribe([](agrobus::isobus::PowerState state) {
         echo::info("Power state changed: ", static_cast<u32>(state));
     });
 

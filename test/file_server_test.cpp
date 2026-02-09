@@ -34,7 +34,7 @@ TEST(error_codes_all_defined) {
     ASSERT(fs_error_to_string(FSError::NotSupported) != nullptr);
     ASSERT(fs_error_to_string(FSError::InvalidLength) != nullptr);
     ASSERT(fs_error_to_string(FSError::OutOfMemory) != nullptr);
-    ASSERT(fs_error_to_string(FSError::EOF) != nullptr);
+    ASSERT(fs_error_to_string(FSError::EndOfFile) != nullptr);
     ASSERT(fs_error_to_string(FSError::TANError) != nullptr);
     ASSERT(fs_error_to_string(FSError::MalformedRequest) != nullptr);
 
