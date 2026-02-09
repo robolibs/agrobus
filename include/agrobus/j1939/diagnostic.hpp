@@ -115,6 +115,8 @@ namespace agrobus::j1939 {
     struct DiagnosticConfig {
         u32 dm1_interval_ms = 1000;
         bool auto_send = false;
+        u8 max_freeze_frames_per_dtc = 3; // Max freeze frames to store per DTC
+        bool auto_capture_freeze_frames = true; // Auto-capture on DTC activation
 
         DiagnosticConfig &interval(u32 ms) {
             dm1_interval_ms = ms;
@@ -122,6 +124,14 @@ namespace agrobus::j1939 {
         }
         DiagnosticConfig &enable_auto_send(bool enable = true) {
             auto_send = enable;
+            return *this;
+        }
+        DiagnosticConfig &freeze_frame_depth(u8 depth) {
+            max_freeze_frames_per_dtc = depth;
+            return *this;
+        }
+        DiagnosticConfig &auto_capture_freeze_frames_enabled(bool enable = true) {
+            auto_capture_freeze_frames = enable;
             return *this;
         }
     };
@@ -265,7 +275,118 @@ namespace agrobus::j1939 {
         }
     };
 
-    // ─── Diagnostic Protocol (DM1/DM2/DM3/DM11/DM13/DM22) ───────────────────────
+    // ─── Freeze Frame Data (DM25) ────────────────────────────────────────────────
+    // Freeze frame captures SPN values at the time a DTC becomes active
+    struct SPNSnapshot {
+        u32 spn = 0;
+        u32 value = 0;
+
+        dp::Array<u8, 7> encode() const noexcept {
+            dp::Array<u8, 7> bytes{};
+            // SPN (19 bits) + value (32 bits)
+            bytes[0] = static_cast<u8>(spn & 0xFF);
+            bytes[1] = static_cast<u8>((spn >> 8) & 0xFF);
+            bytes[2] = static_cast<u8>((spn >> 16) & 0x07);
+            bytes[3] = static_cast<u8>(value & 0xFF);
+            bytes[4] = static_cast<u8>((value >> 8) & 0xFF);
+            bytes[5] = static_cast<u8>((value >> 16) & 0xFF);
+            bytes[6] = static_cast<u8>((value >> 24) & 0xFF);
+            return bytes;
+        }
+
+        static SPNSnapshot decode(const u8 *data) noexcept {
+            SPNSnapshot snap;
+            snap.spn = static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) |
+                       (static_cast<u32>(data[2] & 0x07) << 16);
+            snap.value = static_cast<u32>(data[3]) | (static_cast<u32>(data[4]) << 8) |
+                         (static_cast<u32>(data[5]) << 16) | (static_cast<u32>(data[6]) << 24);
+            return snap;
+        }
+    };
+
+    struct FreezeFrame {
+        DTC dtc;                                // Associated DTC
+        u32 timestamp_ms = 0;                   // Capture time
+        dp::Vector<SPNSnapshot> snapshots;      // Captured SPN values
+
+        // Encode freeze frame for DM25 response
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            // DTC (4 bytes)
+            auto dtc_bytes = dtc.encode();
+            for (auto b : dtc_bytes)
+                data.push_back(b);
+            // Timestamp (4 bytes) - optional, implementation-specific
+            data.push_back(static_cast<u8>(timestamp_ms & 0xFF));
+            data.push_back(static_cast<u8>((timestamp_ms >> 8) & 0xFF));
+            data.push_back(static_cast<u8>((timestamp_ms >> 16) & 0xFF));
+            data.push_back(static_cast<u8>((timestamp_ms >> 24) & 0xFF));
+            // Number of snapshots (1 byte)
+            data.push_back(static_cast<u8>(snapshots.size()));
+            // Snapshots (7 bytes each)
+            for (const auto &snap : snapshots) {
+                auto snap_bytes = snap.encode();
+                for (auto b : snap_bytes)
+                    data.push_back(b);
+            }
+            return data;
+        }
+
+        static FreezeFrame decode(const dp::Vector<u8> &data) {
+            FreezeFrame ff;
+            if (data.size() < 9)
+                return ff; // Not enough data
+
+            // DTC (4 bytes)
+            ff.dtc = DTC::decode(data.data());
+
+            // Timestamp (4 bytes)
+            ff.timestamp_ms = static_cast<u32>(data[4]) | (static_cast<u32>(data[5]) << 8) |
+                              (static_cast<u32>(data[6]) << 16) | (static_cast<u32>(data[7]) << 24);
+
+            // Number of snapshots (1 byte)
+            u8 num_snapshots = data[8];
+
+            // Snapshots (7 bytes each)
+            usize offset = 9;
+            for (u8 i = 0; i < num_snapshots && offset + 7 <= data.size(); ++i) {
+                ff.snapshots.push_back(SPNSnapshot::decode(data.data() + offset));
+                offset += 7;
+            }
+
+            return ff;
+        }
+    };
+
+    // DM25 Expanded Freeze Frame Request/Response
+    struct DM25Request {
+        u32 spn = 0;     // SPN of the DTC to retrieve freeze frame for
+        FMI fmi = FMI::RootCauseUnknown;
+        u8 frame_number = 0; // 0 = most recent, 1 = next most recent, etc.
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data(8, 0xFF);
+            data[0] = static_cast<u8>(spn & 0xFF);
+            data[1] = static_cast<u8>((spn >> 8) & 0xFF);
+            data[2] = static_cast<u8>((spn >> 16) & 0x07);
+            data[3] = static_cast<u8>(fmi);
+            data[4] = frame_number;
+            return data;
+        }
+
+        static DM25Request decode(const dp::Vector<u8> &data) {
+            DM25Request req;
+            if (data.size() < 5)
+                return req;
+            req.spn = static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) |
+                      (static_cast<u32>(data[2] & 0x07) << 16);
+            req.fmi = static_cast<FMI>(data[3]);
+            req.frame_number = data[4];
+            return req;
+        }
+    };
+
+    // ─── Diagnostic Protocol (DM1/DM2/DM3/DM11/DM13/DM22/DM25) ──────────────────
     class DiagnosticProtocol {
         IsoNet &net_;
         InternalCF *cf_;
@@ -287,9 +408,19 @@ namespace agrobus::j1939 {
         DiagnosticProtocolID diag_protocol_id_; // DM5: supported protocols
         dp::Optional<AcknowledgmentHandler> ack_handler_;
 
+        // Freeze frame support (DM25)
+        dp::Map<u32, dp::Vector<FreezeFrame>> freeze_frames_; // Key: (SPN << 8) | FMI
+        u8 max_freeze_frames_per_dtc_ = 3;
+        bool auto_capture_freeze_frames_ = true;
+
       public:
         DiagnosticProtocol(IsoNet &net, InternalCF *cf, DiagnosticConfig config = {})
-            : net_(net), cf_(cf), dm1_interval_ms_(config.dm1_interval_ms), auto_send_(config.auto_send) {}
+            : net_(net),
+              cf_(cf),
+              dm1_interval_ms_(config.dm1_interval_ms),
+              auto_send_(config.auto_send),
+              max_freeze_frames_per_dtc_(config.max_freeze_frames_per_dtc),
+              auto_capture_freeze_frames_(config.auto_capture_freeze_frames) {}
 
         Result<void> initialize() {
             if (!cf_) {
@@ -309,7 +440,8 @@ namespace agrobus::j1939 {
                                        [this](const Message &msg) { handle_product_id(msg); });
             net_.register_pgn_callback(PGN_SOFTWARE_ID, [this](const Message &msg) { handle_software_id(msg); });
             net_.register_pgn_callback(PGN_DIAGNOSTIC_PROTOCOL_ID, [this](const Message &msg) { handle_dm5(msg); });
-            echo::category("isobus.diagnostic").debug("initialized (DM1/DM2/DM3/DM5/DM11/DM13/DM22)");
+            net_.register_pgn_callback(0xD600, [this](const Message &msg) { handle_dm25_request(msg); }); // DM25
+            echo::category("isobus.diagnostic").debug("initialized (DM1/DM2/DM3/DM5/DM11/DM13/DM22/DM25)");
             return {};
         }
 
@@ -337,15 +469,28 @@ namespace agrobus::j1939 {
 
         // ─── DTC management ──────────────────────────────────────────────────────
         Result<void> set_active(DTC dtc) {
+            bool is_new_dtc = true;
             for (auto &existing : active_dtcs_) {
                 if (existing == dtc) {
                     existing.occurrence_count = (existing.occurrence_count < 126) ? existing.occurrence_count + 1 : 126;
-                    return {};
+                    is_new_dtc = false;
+                    break;
                 }
             }
-            dtc.occurrence_count = 1;
-            active_dtcs_.push_back(dtc);
-            echo::category("isobus.diagnostic").info("DTC set active: spn=", dtc.spn);
+
+            if (is_new_dtc) {
+                dtc.occurrence_count = 1;
+                active_dtcs_.push_back(dtc);
+                echo::category("isobus.diagnostic").info("DTC set active: spn=", dtc.spn);
+
+                // Auto-capture freeze frame on new DTC activation
+                if (auto_capture_freeze_frames_) {
+                    auto result = capture_freeze_frame(dtc, dp::Vector<SPNSnapshot>());
+                    if (result.is_ok()) {
+                        echo::category("isobus.diagnostic").debug("Freeze frame captured for DTC spn=", dtc.spn);
+                    }
+                }
+            }
             return {};
         }
 
@@ -518,6 +663,71 @@ namespace agrobus::j1939 {
         }
 
         // ─── Events ──────────────────────────────────────────────────────────────
+        // ─── Freeze Frame Management (DM25) ──────────────────────────────────────
+        Result<void> capture_freeze_frame(const DTC &dtc, const dp::Vector<SPNSnapshot> &snapshots, u32 timestamp_ms = 0) {
+            u32 key = make_freeze_frame_key(dtc.spn, dtc.fmi);
+
+            FreezeFrame ff;
+            ff.dtc = dtc;
+            ff.timestamp_ms = timestamp_ms;
+            ff.snapshots = snapshots;
+
+            // Add to storage
+            auto &frames = freeze_frames_[key];
+            frames.push_back(ff);
+
+            // Limit depth per DTC
+            if (frames.size() > max_freeze_frames_per_dtc_) {
+                frames.erase(frames.begin()); // Remove oldest
+            }
+
+            echo::category("isobus.diagnostic").debug("Freeze frame captured: spn=", dtc.spn, " frames=", frames.size());
+            return {};
+        }
+
+        dp::Optional<FreezeFrame> get_freeze_frame(u32 spn, FMI fmi, u8 frame_number = 0) const {
+            u32 key = make_freeze_frame_key(spn, fmi);
+            auto it = freeze_frames_.find(key);
+            if (it == freeze_frames_.end() || it->second.empty())
+                return dp::nullopt;
+
+            const auto &frames = it->second;
+            if (frame_number >= frames.size())
+                return dp::nullopt;
+
+            // Most recent first
+            usize index = frames.size() - 1 - frame_number;
+            return frames[index];
+        }
+
+        const dp::Map<u32, dp::Vector<FreezeFrame>> &freeze_frames() const noexcept { return freeze_frames_; }
+
+        void clear_freeze_frames(u32 spn, FMI fmi) {
+            u32 key = make_freeze_frame_key(spn, fmi);
+            freeze_frames_.erase(key);
+            echo::category("isobus.diagnostic").debug("Freeze frames cleared: spn=", spn);
+        }
+
+        void clear_all_freeze_frames() {
+            freeze_frames_.clear();
+            echo::category("isobus.diagnostic").info("All freeze frames cleared");
+        }
+
+        // Send DM25 response with freeze frame data
+        Result<void> send_dm25_response(u32 spn, FMI fmi, u8 frame_number, Address destination) {
+            auto ff = get_freeze_frame(spn, fmi, frame_number);
+            if (!ff.has_value()) {
+                echo::category("isobus.diagnostic").warn("Freeze frame not found: spn=", spn, " frame=", frame_number);
+                return nack_unsupported_pgn(0xD600, destination);
+            }
+
+            auto data = ff.value().encode();
+            ControlFunction dest_cf;
+            dest_cf.address = destination;
+            return net_.send(0xD600, data, cf_, &dest_cf); // DM25 PGN
+        }
+
+        // ─── Events ──────────────────────────────────────────────────────────────
         Event<const dp::Vector<DTC> &, Address> on_dm1_received;
         Event<const dp::Vector<DTC> &, Address> on_dm2_received;
         Event<const dp::Vector<DTC> &, Address> on_dm3_received; // Previously active DTCs received
@@ -527,6 +737,7 @@ namespace agrobus::j1939 {
         Event<const ProductIdentification &, Address> on_product_id_received;
         Event<const SoftwareIdentification &, Address> on_software_id_received;
         Event<const DiagnosticProtocolID &, Address> on_dm5_received;
+        Event<const DM25Request &, Address> on_dm25_request;     // Freeze frame request
 
       private:
         void track_previously_active(const DTC &dtc) {
@@ -716,6 +927,25 @@ namespace agrobus::j1939 {
                 }
             }
             return dtcs;
+        }
+
+        // ─── Freeze Frame Helpers ────────────────────────────────────────────────
+        static u32 make_freeze_frame_key(u32 spn, FMI fmi) noexcept {
+            return (spn << 8) | static_cast<u32>(fmi);
+        }
+
+        void handle_dm25_request(const Message &msg) {
+            if (msg.data.size() < 5)
+                return;
+
+            DM25Request req = DM25Request::decode(msg.data);
+            echo::category("isobus.diagnostic")
+                .debug("DM25 request: spn=", req.spn, " fmi=", static_cast<u32>(req.fmi), " frame=", req.frame_number);
+
+            on_dm25_request.emit(req, msg.source);
+
+            // Auto-respond with freeze frame if available
+            send_dm25_response(req.spn, req.fmi, req.frame_number, msg.source);
         }
     };
 } // namespace agrobus::j1939
