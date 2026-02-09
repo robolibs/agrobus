@@ -53,8 +53,12 @@
 // ─── ISOBUS (VT, TC, SC, implement, file server) ───────────────────────────
 #include "agrobus/isobus/auxiliary.hpp"
 #include "agrobus/isobus/file_transfer.hpp"
+#include "agrobus/isobus/fs/client.hpp"
 #include "agrobus/isobus/fs/connection.hpp"
+#include "agrobus/isobus/fs/error_codes.hpp"
 #include "agrobus/isobus/fs/properties.hpp"
+#include "agrobus/isobus/fs/server.hpp"
+#include "agrobus/isobus/fs/types.hpp"
 #include "agrobus/isobus/functionalities.hpp"
 #include "agrobus/isobus/group_function.hpp"
 #include "agrobus/isobus/guidance.hpp"
