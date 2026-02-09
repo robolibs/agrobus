@@ -32,7 +32,7 @@ struct ClientSetup {
     wirebit::CanEndpoint harness_ep;
     IsoNet nm;
     InternalCF *cf = nullptr;
-    FileClient *client = nullptr;
+    fs::FileClient *client = nullptr;
 
     ClientSetup()
         : dut_link(std::make_shared<wirebit::SocketCanLink>(
@@ -43,7 +43,7 @@ struct ClientSetup {
           harness_ep(harness_link, wirebit::CanConfig{}, 2) {
         nm.set_endpoint(0, &dut_ep);
         cf = nm.create_internal(Name::build().set_identity_number(1).set_manufacturer_code(100), 0, 0x10).value();
-        client = new FileClient(nm, cf);
+        client = new fs::FileClient(nm, cf);
         client->initialize();
     }
 
@@ -57,7 +57,7 @@ struct ClientSetup {
     }
 };
 
-TEST_CASE("FileClient - one-inflight rule: single request succeeds") {
+TEST_CASE("fs::FileClient - one-inflight rule: single request succeeds") {
     ClientSetup setup;
 
     CHECK_FALSE(setup.client->is_request_pending());
@@ -66,7 +66,7 @@ TEST_CASE("FileClient - one-inflight rule: single request succeeds") {
     CHECK(setup.client->is_request_pending());
 }
 
-TEST_CASE("FileClient - one-inflight rule: second request while first pending returns error") {
+TEST_CASE("fs::FileClient - one-inflight rule: second request while first pending returns error") {
     ClientSetup setup;
 
     auto r1 = setup.client->request_open("file1.bin");
@@ -79,7 +79,7 @@ TEST_CASE("FileClient - one-inflight rule: second request while first pending re
     CHECK(r2.error().code == ErrorCode::InvalidState);
 }
 
-TEST_CASE("FileClient - one-inflight rule: response clears pending state") {
+TEST_CASE("fs::FileClient - one-inflight rule: response clears pending state") {
     ClientSetup setup;
 
     // Send open request
@@ -99,7 +99,7 @@ TEST_CASE("FileClient - one-inflight rule: response clears pending state") {
     CHECK(setup.client->is_request_pending());
 }
 
-TEST_CASE("FileClient - one-inflight rule: timeout clears pending after 6s") {
+TEST_CASE("fs::FileClient - one-inflight rule: timeout clears pending after 6s") {
     ClientSetup setup;
 
     bool timeout_fired = false;
@@ -125,7 +125,7 @@ TEST_CASE("FileClient - one-inflight rule: timeout clears pending after 6s") {
     CHECK(timeout_fired);
 }
 
-TEST_CASE("FileClient - one-inflight rule: different operations all respect one-inflight") {
+TEST_CASE("fs::FileClient - one-inflight rule: different operations all respect one-inflight") {
     ClientSetup setup;
 
     SUBCASE("open blocks list") {
@@ -159,11 +159,11 @@ TEST_CASE("FileClient - one-inflight rule: different operations all respect one-
     }
 }
 
-TEST_CASE("FileServer - busy cadence switches between 200ms busy and 2000ms idle") {
+TEST_CASE("fs::FileServerEnhanced - busy cadence switches between 200ms busy and 2000ms idle") {
     IsoNet nm;
     auto *cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
-    FileServer server(nm, cf, FileServerConfig{}.path("/data"));
+    fs::FileServerEnhanced server(nm, cf, FileServerConfig{}.path("/data"));
     server.initialize();
 
     SUBCASE("idle uses 2000ms interval") {
@@ -196,7 +196,7 @@ TEST_CASE("FileServer - busy cadence switches between 200ms busy and 2000ms idle
         nm2.set_endpoint(0, &busy_ep);
         auto *cf2 = nm2.create_internal(Name::build().set_identity_number(2), 0, 0x20).value();
 
-        FileServer busy_server(nm2, cf2, FileServerConfig{}.path("/data"));
+        fs::FileServerEnhanced busy_server(nm2, cf2, FileServerConfig{}.path("/data"));
         busy_server.initialize();
         busy_server.set_busy(true);
 

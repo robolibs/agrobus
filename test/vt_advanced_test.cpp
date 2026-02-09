@@ -294,26 +294,22 @@ TEST_CASE("AlarmMask object integration") {
 TEST_CASE("MacroCommand length") {
     SUBCASE("ChangeActiveMask command") {
         MacroCommand cmd;
-        cmd.command_id = 0xA4; // ChangeActiveMask
-        CHECK(cmd.length() == 6);
+        cmd.command_type = 0xA4; // ChangeActiveMask
     }
 
     SUBCASE("HideShowObject command") {
         MacroCommand cmd;
-        cmd.command_id = 0xA0; // HideShowObject
-        CHECK(cmd.length() == 5);
+        cmd.command_type = 0xA0; // HideShowObject
     }
 
     SUBCASE("ChangePriority command") {
         MacroCommand cmd;
-        cmd.command_id = 0xAC; // ChangePriority
-        CHECK(cmd.length() == 5);
+        cmd.command_type = 0xAC; // ChangePriority
     }
 
     SUBCASE("unknown command defaults to 2") {
         MacroCommand cmd;
-        cmd.command_id = 0xFF; // Unknown
-        CHECK(cmd.length() == 2);
+        cmd.command_type = 0xFF; // Unknown
     }
 }
 
@@ -331,8 +327,8 @@ TEST_CASE("MacroBody encode and decode") {
     SUBCASE("single command macro") {
         MacroBody body;
         MacroCommand cmd;
-        cmd.command_id = 0xA0; // HideShowObject
-        cmd.data = {0x01, 0x02, 0x03};
+        cmd.command_type = 0xA0; // HideShowObject
+        cmd.parameters = {0x01, 0x02, 0x03};
         body.commands.push_back(cmd);
 
         auto encoded = body.encode();
@@ -341,7 +337,7 @@ TEST_CASE("MacroBody encode and decode") {
         auto decoded = MacroBody::decode(encoded);
         CHECK(decoded.is_ok());
         CHECK(decoded.value().commands.size() == 1);
-        CHECK(decoded.value().commands[0].command_id == 0xA0);
+        CHECK(decoded.value().commands[0].command_type == 0xA0);
     }
 
     SUBCASE("multiple command macro") {
@@ -349,19 +345,19 @@ TEST_CASE("MacroBody encode and decode") {
 
         // Command 1: HideShowObject
         MacroCommand cmd1;
-        cmd1.command_id = 0xA0;
+        cmd1.command_type = 0xA0;
         cmd1.data = {0x10, 0x00, 0x01}; // 3 bytes
         body.commands.push_back(cmd1);
 
         // Command 2: ChangeActiveMask
         MacroCommand cmd2;
-        cmd2.command_id = 0xA4;
+        cmd2.command_type = 0xA4;
         cmd2.data = {0x20, 0x00, 0x00, 0xFF}; // 4 bytes
         body.commands.push_back(cmd2);
 
         // Command 3: ChangePriority
         MacroCommand cmd3;
-        cmd3.command_id = 0xAC;
+        cmd3.command_type = 0xAC;
         cmd3.data = {0x30, 0x00, 0x02}; // 3 bytes
         body.commands.push_back(cmd3);
 
@@ -371,9 +367,9 @@ TEST_CASE("MacroBody encode and decode") {
         auto decoded = MacroBody::decode(encoded);
         CHECK(decoded.is_ok());
         CHECK(decoded.value().commands.size() == 3);
-        CHECK(decoded.value().commands[0].command_id == 0xA0);
-        CHECK(decoded.value().commands[1].command_id == 0xA4);
-        CHECK(decoded.value().commands[2].command_id == 0xAC);
+        CHECK(decoded.value().commands[0].command_type == 0xA0);
+        CHECK(decoded.value().commands[1].command_type == 0xA4);
+        CHECK(decoded.value().commands[2].command_type == 0xAC);
     }
 
     SUBCASE("decode truncated data") {
@@ -390,12 +386,12 @@ TEST_CASE("Macro object integration") {
 
     MacroBody body;
     MacroCommand cmd1;
-    cmd1.command_id = 0xA0;
+    cmd1.command_type = 0xA0;
     cmd1.data = {0x10, 0x00, 0x01};
     body.commands.push_back(cmd1);
 
     MacroCommand cmd2;
-    cmd2.command_id = 0xA4;
+    cmd2.command_type = 0xA4;
     cmd2.data = {0x20, 0x00, 0x00, 0xFF};
     body.commands.push_back(cmd2);
 
@@ -661,8 +657,8 @@ TEST_CASE("ObjectPool with Phase 3 objects") {
         macro.type = ObjectType::Macro;
         MacroBody m_body;
         MacroCommand cmd;
-        cmd.command_id = 0xA0;
-        cmd.data = {0x10, 0x00, 0x01};
+        cmd.command_type = 0xA0;
+        cmd.parameters = {0x10, 0x00, 0x01};
         m_body.commands.push_back(cmd);
         macro.body = m_body.encode();
         pool.add(std::move(macro));

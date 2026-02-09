@@ -90,37 +90,37 @@ TEST_CASE("get_bits u64") {
 TEST_CASE("set_bits u8") {
     SUBCASE("set single bit") {
         u8 value = 0b00000000;
-        value = set_bits(value, 0, 1, 1);
+        value = set_bits<u8>(value, 0, 1, 1);
         CHECK(value == 0b00000001);
-        value = set_bits(value, 2, 1, 1);
+        value = set_bits<u8>(value, 2, 1, 1);
         CHECK(value == 0b00000101);
     }
 
     SUBCASE("set multiple bits") {
         u8 value = 0b00000000;
-        value = set_bits(value, 0, 4, 0b1010);
+        value = set_bits<u8>(value, 0, 4, 0b1010);
         CHECK(value == 0b00001010);
-        value = set_bits(value, 4, 4, 0b0101);
+        value = set_bits<u8>(value, 4, 4, 0b0101);
         CHECK(value == 0b01011010);
     }
 
     SUBCASE("overwrite existing bits") {
         u8 value = 0b11111111;
-        value = set_bits(value, 2, 4, 0b0000);
+        value = set_bits<u8>(value, 2, 4, 0b0000);
         CHECK(value == 0b11000011);
     }
 
     SUBCASE("zero length does nothing") {
         u8 value = 0b10101010;
         u8 orig = value;
-        value = set_bits(value, 0, 0, 0xFF);
+        value = set_bits<u8>(value, 0, 0, 0xFF);
         CHECK(value == orig);
     }
 
     SUBCASE("out of bounds start_bit does nothing") {
         u8 value = 0b10101010;
         u8 orig = value;
-        value = set_bits(value, 8, 1, 1);
+        value = set_bits<u8>(value, 8, 1, 1);
         CHECK(value == orig);
     }
 }
@@ -128,7 +128,7 @@ TEST_CASE("set_bits u8") {
 TEST_CASE("set_bits u16") {
     SUBCASE("set bits across byte boundary") {
         u16 value = 0x0000;
-        value = set_bits(value, 4, 8, 0xFF);
+        value = set_bits<u8>(value, 4, 8, 0xFF);
         CHECK(value == 0x0FF0);
     }
 
@@ -144,7 +144,7 @@ TEST_CASE("set_bits u16") {
 TEST_CASE("set_bits u32") {
     SUBCASE("set full byte") {
         u32 value = 0x00000000;
-        value = set_bits(value, 8, 8, 0xAB);
+        value = set_bits<u8>(value, 8, 8, 0xAB);
         CHECK(value == 0x0000AB00);
     }
 }
@@ -152,7 +152,7 @@ TEST_CASE("set_bits u32") {
 TEST_CASE("set_bits u64") {
     SUBCASE("set bits in 64-bit value") {
         u64 value = 0x0;
-        value = set_bits(value, 32, 16, 0x1234);
+        value = set_bits<u8>(value, 32, 16, 0x1234);
         CHECK(value == 0x0000123400000000ULL);
     }
 }

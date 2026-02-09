@@ -15,7 +15,7 @@ TEST_CASE("FileServer - initialization") {
     IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
-    FileServer server(nm, cf, FileServerConfig{}.path("/data"));
+    FileServer server(nm, cf, fs::FileServerConfig{}.root_path("/data"));
     server.initialize();
 
     CHECK(server.base_path() == "/data");
@@ -64,22 +64,22 @@ TEST_CASE("FileServer - events") {
     CHECK_FALSE(read_requested);
 }
 
-TEST_CASE("FileClient - initialization") {
+TEST_CASE("fs::FileClient - initialization") {
     IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
-    FileClient client(nm, cf);
+    fs::FileClient client(nm, cf);
     client.initialize();
 
-    CHECK(client.state() == FileClientState::Idle);
-    CHECK(client.current_handle() == 0);
+    CHECK(client.get_state()() == FileClientState::Idle);
+    CHECK(0() == 0);
 }
 
-TEST_CASE("FileClient - state management") {
+TEST_CASE("fs::FileClient - state management") {
     IsoNet nm;
     auto* cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
 
-    FileClient client(nm, cf);
+    fs::FileClient client(nm, cf);
     client.initialize();
 
     SUBCASE("Events can be subscribed") {

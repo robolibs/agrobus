@@ -565,7 +565,7 @@ TEST_CASE("AddressTranslationDB translate") {
 
     SUBCASE("translate unknown address") {
         Address unknown = db.translate(0x99, Side::Tractor);
-        CHECK(unknown == INVALID_ADDRESS);
+        CHECK(unknown == NULL_ADDRESS);
     }
 }
 
