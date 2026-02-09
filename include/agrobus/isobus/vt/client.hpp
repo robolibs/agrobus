@@ -26,11 +26,37 @@ namespace agrobus::isobus::vt {
         UploadPool,
         WaitForPoolStore,
         WaitForPoolActivate,
+        ReloadPool, // Language mismatch - reload pool with correct language
         Connected
     };
 
     // ─── VT Version ─────────────────────────────────────────────────────────────
     enum class VTVersion : u8 { Version3 = 3, Version4 = 4, Version5 = 5 };
+
+    // ─── Language Codes (ISO 639-1) ────────────────────────────────────────────
+    // Two-letter language codes as used in ISO 11783-7
+    struct LanguageCode {
+        char code[2] = {'e', 'n'}; // Default: English
+
+        bool operator==(const LanguageCode &other) const { return code[0] == other.code[0] && code[1] == other.code[1]; }
+        bool operator!=(const LanguageCode &other) const { return !(*this == other); }
+
+        static LanguageCode from_string(const dp::String &str) {
+            LanguageCode lc;
+            if (str.size() >= 2) {
+                lc.code[0] = str[0];
+                lc.code[1] = str[1];
+            }
+            return lc;
+        }
+
+        dp::String to_string() const {
+            dp::String s;
+            s += code[0];
+            s += code[1];
+            return s;
+        }
+    };
 
     // ─── VT Client Config ────────────────────────────────────────────────────────
     struct VTClientConfig {
@@ -62,11 +88,24 @@ namespace agrobus::isobus::vt {
         bool vt_supports_extended_versions_ = false;
         bool is_active_ws_ = false;
 
+        // Language negotiation
+        LanguageCode current_language_{'e', 'n'}; // Current client language
+        LanguageCode vt_language_{'e', 'n'};      // VT's reported language
+        bool auto_reload_on_language_change_ = true;
+
       public:
         VTClient(IsoNet &net, InternalCF *cf, VTClientConfig config = {}) : net_(net), cf_(cf), config_(config) {}
 
         void set_object_pool(ObjectPool pool) { pool_ = std::move(pool); }
         void set_working_set(WorkingSet ws) { working_set_ = std::move(ws); }
+
+        // ─── Language Management ──────────────────────────────────────────────────
+        void set_language(const LanguageCode &lang) { current_language_ = lang; }
+        void set_language(const dp::String &lang_str) { current_language_ = LanguageCode::from_string(lang_str); }
+        LanguageCode get_language() const noexcept { return current_language_; }
+        LanguageCode get_vt_language() const noexcept { return vt_language_; }
+        void set_auto_reload_on_language_change(bool enable) { auto_reload_on_language_change_ = enable; }
+        bool get_auto_reload_on_language_change() const noexcept { return auto_reload_on_language_change_; }
 
         // ─── Active Working Set status ────────────────────────────────────────────
         bool is_active_ws() const noexcept { return is_active_ws_; }
@@ -79,6 +118,9 @@ namespace agrobus::isobus::vt {
             timer_ms_ = 0;
 
             net_.register_pgn_callback(PGN_VT_TO_ECU, [this](const Message &msg) { handle_vt_message(msg); });
+
+            // Register for Language Command (ISO 11783-7)
+            net_.register_pgn_callback(0xFE0F, [this](const Message &msg) { handle_language_command(msg); });
 
             echo::category("isobus.vt.client").info("VT client connecting...");
             return {};
@@ -497,6 +539,15 @@ namespace agrobus::isobus::vt {
                 }
                 break;
 
+            case VTState::ReloadPool: {
+                // Reload pool due to language change
+                echo::category("isobus.vt.client")
+                    .info("Reloading pool for language change: ", vt_language_.to_string());
+                state_.transition(VTState::SendGetMemory);
+                timer_ms_ = 0;
+                break;
+            }
+
             default:
                 break;
             }
@@ -517,6 +568,7 @@ namespace agrobus::isobus::vt {
         Event<bool, u8> on_extended_store_response;                  // (success, error_code)
         Event<bool, u8> on_extended_load_response;                   // (success, error_code)
         Event<bool> on_active_ws_status;                             // true if this client is active WS
+        Event<LanguageCode, LanguageCode> on_language_change;        // (old_lang, new_lang)
 
       private:
         dp::Vector<VTMacro> macros_;
@@ -826,6 +878,27 @@ namespace agrobus::isobus::vt {
             }
         }
 
+        void handle_language_command(const Message &msg) {
+            // Language Command (ISO 11783-7 PGN 0xFE0F)
+            // [0] = language code byte 1
+            // [1] = language code byte 2
+            // [2] = time format
+            // [3] = date format
+            // [4] = units (distance/area/volume/mass/temperature/pressure)
+            // [5] = reserved
+            // [6] = reserved
+            // [7] = reserved
+            if (msg.data.size() < 2)
+                return;
+
+            LanguageCode new_lang;
+            new_lang.code[0] = static_cast<char>(msg.data[0]);
+            new_lang.code[1] = static_cast<char>(msg.data[1]);
+
+            echo::category("isobus.vt.client").debug("Received language command: ", new_lang.to_string());
+            update_vt_language(new_lang);
+        }
+
         // ─── V5 negotiation: try extended label first, fallback to classic ──────
         void negotiate_version_label(const dp::String &label) {
             if (vt_version_ >= static_cast<u16>(VTVersion::Version5)) {
@@ -835,6 +908,39 @@ namespace agrobus::isobus::vt {
             } else {
                 // Classic: use 7-byte label
                 load_version(label.substr(0, vt_cmd::CLASSIC_VERSION_LABEL_SIZE));
+            }
+        }
+
+        // ─── Language Negotiation ─────────────────────────────────────────────────
+        void check_language_mismatch() {
+            if (!auto_reload_on_language_change_)
+                return;
+
+            if (current_language_ != vt_language_) {
+                echo::category("isobus.vt.client")
+                    .warn("Language mismatch detected: client=",
+                          current_language_.to_string(),
+                          " vt=",
+                          vt_language_.to_string());
+
+                // Update client language to match VT
+                LanguageCode old_lang = current_language_;
+                current_language_ = vt_language_;
+                on_language_change.emit(old_lang, current_language_);
+
+                // Trigger pool reload if connected
+                if (state_.state() == VTState::Connected) {
+                    echo::category("isobus.vt.client").info("Initiating pool reload for language change");
+                    state_.transition(VTState::ReloadPool);
+                    timer_ms_ = 0;
+                }
+            }
+        }
+
+        void update_vt_language(const LanguageCode &lang) {
+            if (vt_language_ != lang) {
+                vt_language_ = lang;
+                check_language_mismatch();
             }
         }
     };
