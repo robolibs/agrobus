@@ -261,13 +261,15 @@ TEST_CASE("BusLoad edge cases") {
     SUBCASE("accumulating timer") {
         bus_load.add_frame(8);
 
-        // Update with time that doesn't reach sample period
+        // Update with time that doesn't reach sample period (90ms < 100ms)
         bus_load.update(30);
         bus_load.update(30);
         bus_load.update(30);
+        CHECK(bus_load.load_percent() == 0.0f); // Not yet recorded
 
-        // Now should have crossed sample period
-        CHECK(bus_load.load_percent() > 0.0f);
+        // Complete the period
+        bus_load.update(10); // Total: 100ms
+        CHECK(bus_load.load_percent() > 0.0f); // Now recorded
     }
 }
 
