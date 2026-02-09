@@ -275,6 +275,91 @@ namespace agrobus::j1939 {
         }
     };
 
+    // ─── Monitor Performance Ratio (DM20) ────────────────────────────────────────
+    // Performance ratios track emissions monitor execution vs. opportunities
+    // Used for OBD compliance and readiness monitoring
+    struct MonitorPerformanceRatio {
+        u32 spn = 0;           // Monitor identifier SPN
+        u16 numerator = 0;     // Number of times monitor executed
+        u16 denominator = 0;   // Number of monitoring opportunities
+
+        dp::Array<u8, 7> encode() const noexcept {
+            dp::Array<u8, 7> bytes{};
+            // SPN (19 bits)
+            bytes[0] = static_cast<u8>(spn & 0xFF);
+            bytes[1] = static_cast<u8>((spn >> 8) & 0xFF);
+            bytes[2] = static_cast<u8>((spn >> 16) & 0x07);
+            // Numerator (16 bits)
+            bytes[3] = static_cast<u8>(numerator & 0xFF);
+            bytes[4] = static_cast<u8>((numerator >> 8) & 0xFF);
+            // Denominator (16 bits)
+            bytes[5] = static_cast<u8>(denominator & 0xFF);
+            bytes[6] = static_cast<u8>((denominator >> 8) & 0xFF);
+            return bytes;
+        }
+
+        static MonitorPerformanceRatio decode(const u8 *data) noexcept {
+            MonitorPerformanceRatio ratio;
+            ratio.spn = static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) |
+                        (static_cast<u32>(data[2] & 0x07) << 16);
+            ratio.numerator = static_cast<u16>(data[3]) | (static_cast<u16>(data[4]) << 8);
+            ratio.denominator = static_cast<u16>(data[5]) | (static_cast<u16>(data[6]) << 8);
+            return ratio;
+        }
+
+        // Calculate ratio percentage (0-100)
+        u8 percentage() const noexcept {
+            if (denominator == 0)
+                return 0;
+            u32 result = (static_cast<u32>(numerator) * 100) / denominator;
+            return static_cast<u8>(result > 100 ? 100 : result);
+        }
+
+        // Check if ratio meets minimum threshold (typically 75% for OBD)
+        bool meets_threshold(u8 threshold = 75) const noexcept { return percentage() >= threshold; }
+    };
+
+    // DM20 (PGN 0xC200) contains multiple performance ratios
+    struct DM20Response {
+        u8 ignition_cycles = 0;                        // Ignition cycles since DTCs cleared
+        u8 obd_monitoring_conditions_met = 0;          // OBD monitoring conditions encounter count
+        dp::Vector<MonitorPerformanceRatio> ratios;   // Performance ratios for each monitor
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(ignition_cycles);
+            data.push_back(obd_monitoring_conditions_met);
+            // Encode all ratios (7 bytes each)
+            for (const auto &ratio : ratios) {
+                auto ratio_bytes = ratio.encode();
+                for (auto b : ratio_bytes)
+                    data.push_back(b);
+            }
+            // Pad to at least 8 bytes
+            while (data.size() < 8)
+                data.push_back(0xFF);
+            return data;
+        }
+
+        static DM20Response decode(const dp::Vector<u8> &data) {
+            DM20Response resp;
+            if (data.size() < 2)
+                return resp;
+
+            resp.ignition_cycles = data[0];
+            resp.obd_monitoring_conditions_met = data[1];
+
+            // Decode ratios (7 bytes each)
+            usize offset = 2;
+            while (offset + 7 <= data.size()) {
+                resp.ratios.push_back(MonitorPerformanceRatio::decode(data.data() + offset));
+                offset += 7;
+            }
+
+            return resp;
+        }
+    };
+
     // ─── Freeze Frame Data (DM25) ────────────────────────────────────────────────
     // Freeze frame captures SPN values at the time a DTC becomes active
     struct SPNSnapshot {
@@ -413,6 +498,9 @@ namespace agrobus::j1939 {
         u8 max_freeze_frames_per_dtc_ = 3;
         bool auto_capture_freeze_frames_ = true;
 
+        // Monitor performance ratios (DM20)
+        DM20Response dm20_data_;
+
       public:
         DiagnosticProtocol(IsoNet &net, InternalCF *cf, DiagnosticConfig config = {})
             : net_(net),
@@ -440,8 +528,9 @@ namespace agrobus::j1939 {
                                        [this](const Message &msg) { handle_product_id(msg); });
             net_.register_pgn_callback(PGN_SOFTWARE_ID, [this](const Message &msg) { handle_software_id(msg); });
             net_.register_pgn_callback(PGN_DIAGNOSTIC_PROTOCOL_ID, [this](const Message &msg) { handle_dm5(msg); });
+            net_.register_pgn_callback(0xC200, [this](const Message &msg) { handle_dm20_request(msg); }); // DM20
             net_.register_pgn_callback(0xD600, [this](const Message &msg) { handle_dm25_request(msg); }); // DM25
-            echo::category("isobus.diagnostic").debug("initialized (DM1/DM2/DM3/DM5/DM11/DM13/DM22/DM25)");
+            echo::category("isobus.diagnostic").debug("initialized (DM1/DM2/DM3/DM5/DM11/DM13/DM20/DM22/DM25)");
             return {};
         }
 
@@ -663,6 +752,90 @@ namespace agrobus::j1939 {
         }
 
         // ─── Events ──────────────────────────────────────────────────────────────
+        // ─── Monitor Performance Ratios (DM20) ────────────────────────────────────
+        void set_ignition_cycles(u8 cycles) { dm20_data_.ignition_cycles = cycles; }
+        void set_obd_conditions_met(u8 count) { dm20_data_.obd_monitoring_conditions_met = count; }
+
+        void increment_ignition_cycles() {
+            if (dm20_data_.ignition_cycles < 255)
+                dm20_data_.ignition_cycles++;
+        }
+
+        void increment_obd_conditions_met() {
+            if (dm20_data_.obd_monitoring_conditions_met < 255)
+                dm20_data_.obd_monitoring_conditions_met++;
+        }
+
+        void set_performance_ratio(u32 spn, u16 numerator, u16 denominator) {
+            // Update existing ratio or add new one
+            for (auto &ratio : dm20_data_.ratios) {
+                if (ratio.spn == spn) {
+                    ratio.numerator = numerator;
+                    ratio.denominator = denominator;
+                    return;
+                }
+            }
+            dm20_data_.ratios.push_back({spn, numerator, denominator});
+        }
+
+        void increment_monitor_execution(u32 spn) {
+            for (auto &ratio : dm20_data_.ratios) {
+                if (ratio.spn == spn) {
+                    if (ratio.numerator < 65535)
+                        ratio.numerator++;
+                    return;
+                }
+            }
+            // Add new monitor if not found
+            dm20_data_.ratios.push_back({spn, 1, 0});
+        }
+
+        void increment_monitor_opportunity(u32 spn) {
+            for (auto &ratio : dm20_data_.ratios) {
+                if (ratio.spn == spn) {
+                    if (ratio.denominator < 65535)
+                        ratio.denominator++;
+                    return;
+                }
+            }
+            // Add new monitor if not found
+            dm20_data_.ratios.push_back({spn, 0, 1});
+        }
+
+        dp::Optional<MonitorPerformanceRatio> get_performance_ratio(u32 spn) const {
+            for (const auto &ratio : dm20_data_.ratios) {
+                if (ratio.spn == spn)
+                    return ratio;
+            }
+            return dp::nullopt;
+        }
+
+        const DM20Response &dm20_data() const noexcept { return dm20_data_; }
+
+        void clear_performance_ratios() {
+            dm20_data_.ratios.clear();
+            echo::category("isobus.diagnostic").debug("Performance ratios cleared");
+        }
+
+        void reset_dm20_counters() {
+            dm20_data_.ignition_cycles = 0;
+            dm20_data_.obd_monitoring_conditions_met = 0;
+            clear_performance_ratios();
+            echo::category("isobus.diagnostic").info("DM20 counters reset");
+        }
+
+        // Send DM20 response (typically in response to request)
+        Result<void> send_dm20(Address destination = GLOBAL_ADDRESS) {
+            auto data = dm20_data_.encode();
+            if (destination == GLOBAL_ADDRESS) {
+                return net_.send(0xC200, data, cf_); // Broadcast
+            } else {
+                ControlFunction dest_cf;
+                dest_cf.address = destination;
+                return net_.send(0xC200, data, cf_, &dest_cf); // Destination-specific
+            }
+        }
+
         // ─── Freeze Frame Management (DM25) ──────────────────────────────────────
         Result<void> capture_freeze_frame(const DTC &dtc, const dp::Vector<SPNSnapshot> &snapshots, u32 timestamp_ms = 0) {
             u32 key = make_freeze_frame_key(dtc.spn, dtc.fmi);
@@ -737,6 +910,8 @@ namespace agrobus::j1939 {
         Event<const ProductIdentification &, Address> on_product_id_received;
         Event<const SoftwareIdentification &, Address> on_software_id_received;
         Event<const DiagnosticProtocolID &, Address> on_dm5_received;
+        Event<Address> on_dm20_request;                          // Performance ratio request
+        Event<const DM20Response &, Address> on_dm20_received;   // Performance ratio data received
         Event<const DM25Request &, Address> on_dm25_request;     // Freeze frame request
 
       private:
@@ -927,6 +1102,22 @@ namespace agrobus::j1939 {
                 }
             }
             return dtcs;
+        }
+
+        // ─── DM20 Handler ─────────────────────────────────────────────────────────
+        void handle_dm20_request(const Message &msg) {
+            // DM20 request is typically a PGN request (empty or minimal data)
+            echo::category("isobus.diagnostic").debug("DM20 request from: ", msg.source);
+            on_dm20_request.emit(msg.source);
+
+            // Auto-respond with current performance ratios
+            send_dm20(msg.source);
+
+            // If receiving DM20 data (not request), parse it
+            if (msg.data.size() >= 2) {
+                DM20Response received = DM20Response::decode(msg.data);
+                on_dm20_received.emit(received, msg.source);
+            }
         }
 
         // ─── Freeze Frame Helpers ────────────────────────────────────────────────
