@@ -66,6 +66,7 @@
 #include "agrobus/isobus/implement/speed_distance.hpp"
 #include "agrobus/isobus/implement/tractor_commands.hpp"
 #include "agrobus/isobus/implement/tractor_facilities.hpp"
+#include "agrobus/isobus/tractor_ecu.hpp"
 #include "agrobus/isobus/sc/client.hpp"
 #include "agrobus/isobus/sc/master.hpp"
 #include "agrobus/isobus/sc/types.hpp"

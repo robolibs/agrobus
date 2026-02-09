@@ -10,12 +10,12 @@
 ///   - Handling value commands (section control setpoint)
 ///   - Running the TC client state machine
 
-#include <echo/echo.hpp>
-#include <agrobus/net/network_manager.hpp>
 #include <agrobus/isobus/tc/client.hpp>
 #include <agrobus/isobus/tc/ddi_database.hpp>
 #include <agrobus/isobus/tc/ddop.hpp>
 #include <agrobus/isobus/tc/objects.hpp>
+#include <agrobus/net/network_manager.hpp>
+#include <echo/echo.hpp>
 
 using namespace agrobus::net;
 using namespace agrobus::isobus;
