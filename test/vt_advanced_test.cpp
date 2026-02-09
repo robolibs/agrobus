@@ -412,7 +412,8 @@ TEST_CASE("AlarmPriority enum") {
 }
 
 TEST_CASE("VTClientStateTracker alarm priority stack") {
-    VTClientStateTracker tracker;
+    IsoNet net;
+    VTClientStateTracker tracker(net);
 
     SUBCASE("activate single alarm") {
         tracker.activate_alarm(1000, 100);

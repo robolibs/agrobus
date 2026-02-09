@@ -59,8 +59,8 @@ TEST_CASE("get_bits u16") {
 
     SUBCASE("extract middle bits") {
         u16 value = 0b1010101010101010;
-        CHECK(get_bits(value, 2, 8) == 0b10101010);
-        CHECK(get_bits(value, 4, 8) == 0b01010101);
+        CHECK(get_bits(value, 2, 8) == 0b10101010); // Bits 2-9
+        CHECK(get_bits(value, 4, 8) == 0b10101010); // Bits 4-11 (all alternating 1/0)
     }
 }
 
@@ -128,7 +128,7 @@ TEST_CASE("set_bits u8") {
 TEST_CASE("set_bits u16") {
     SUBCASE("set bits across byte boundary") {
         u16 value = 0x0000;
-        value = set_bits<u8>(value, 4, 8, 0xFF);
+        value = set_bits(value, 4, 8, static_cast<u16>(0xFF));
         CHECK(value == 0x0FF0);
     }
 
@@ -144,7 +144,7 @@ TEST_CASE("set_bits u16") {
 TEST_CASE("set_bits u32") {
     SUBCASE("set full byte") {
         u32 value = 0x00000000;
-        value = set_bits<u8>(value, 8, 8, 0xAB);
+        value = set_bits(value, 8, 8, static_cast<u32>(0xAB));
         CHECK(value == 0x0000AB00);
     }
 }
@@ -152,7 +152,7 @@ TEST_CASE("set_bits u32") {
 TEST_CASE("set_bits u64") {
     SUBCASE("set bits in 64-bit value") {
         u64 value = 0x0;
-        value = set_bits<u8>(value, 32, 16, 0x1234);
+        value = set_bits(value, 32, 16, static_cast<u64>(0x1234));
         CHECK(value == 0x0000123400000000ULL);
     }
 }

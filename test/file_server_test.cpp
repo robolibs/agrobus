@@ -110,8 +110,8 @@ TEST(types_path_utilities) {
     ASSERT(!is_valid_path_component("FILE:TXT"));  // Colon illegal
     ASSERT(!is_valid_path_component("FILE*.TXT")); // Asterisk illegal in name
 
-    ASSERT(is_absolute_path("\\VOL\\DIR"));
-    ASSERT(!is_absolute_path("DIR\\FILE"));
+    ASSERT(is_absolute_path("\\\\VOL\\\\DIR"));
+    ASSERT(!is_absolute_path("DIR\\\\FILE"));
 
     ASSERT(has_wildcards("*.txt"));
     ASSERT(has_wildcards("file?.dat"));
