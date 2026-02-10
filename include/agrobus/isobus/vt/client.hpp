@@ -129,7 +129,7 @@ namespace agrobus::isobus::vt {
             state_.transition(VTState::UploadPool);
             timer_ms_ = 0;
 
-            echo::category("isobus.vt.client").info("Swapping object pool (", pool_.objects.size(), " objects)");
+            echo::category("isobus.vt.client").info("Swapping object pool (", pool_.objects().size(), " objects)");
             return {};
         }
 

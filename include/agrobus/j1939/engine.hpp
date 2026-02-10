@@ -490,88 +490,6 @@ namespace agrobus::j1939 {
         }
     };
 
-    // ─── Electronic Transmission Controller 1 (ETC1, PGN 61445 / 0x0F005) ───────
-    struct ETC1 {
-        u8 trans_driveline = 0xFF;       // SPN 191: transmission driveline engaged
-        u8 trans_torque_mode = 0xFF;     // SPN 558: torque converter lockup engaged
-        u8 trans_shift_in_progress = 0xFF; // SPN 559: transmission shift in progress
-        i16 trans_output_shaft_speed_rpm = -32127; // SPN 191: 0.125 rpm/bit
-        f64 trans_percent_clutch_slip = 0.0; // SPN 522: 0.4% per bit
-        u8 current_gear = 0xFF;          // SPN 523: -125 offset
-        u8 selected_gear = 0xFF;         // SPN 524: -125 offset
-        u8 trans_requested_range = 0xFF; // SPN 525: 0-250, 251-255 reserved
-        u8 trans_current_range = 0xFF;   // SPN 526: 0-250, 251-255 reserved
-
-        dp::Vector<u8> encode() const {
-            dp::Vector<u8> data(8, 0xFF);
-            data[0] = (trans_driveline & 0x03) | ((trans_torque_mode & 0x03) << 2) |
-                      ((trans_shift_in_progress & 0x03) << 4);
-            u16 shaft_speed = static_cast<u16>((trans_output_shaft_speed_rpm + 32127) / 0.125);
-            data[1] = static_cast<u8>(shaft_speed & 0xFF);
-            data[2] = static_cast<u8>((shaft_speed >> 8) & 0xFF);
-            data[3] = static_cast<u8>(trans_percent_clutch_slip / 0.4);
-            data[4] = selected_gear;
-            data[5] = current_gear;
-            data[6] = trans_requested_range;
-            data[7] = trans_current_range;
-            return data;
-        }
-
-        static ETC1 decode(const dp::Vector<u8> &data) {
-            ETC1 msg;
-            if (data.size() >= 8) {
-                msg.trans_driveline = data[0] & 0x03;
-                msg.trans_torque_mode = (data[0] >> 2) & 0x03;
-                msg.trans_shift_in_progress = (data[0] >> 4) & 0x03;
-                u16 shaft_speed = static_cast<u16>(data[1]) | (static_cast<u16>(data[2]) << 8);
-                msg.trans_output_shaft_speed_rpm = static_cast<i16>(shaft_speed * 0.125 - 32127);
-                msg.trans_percent_clutch_slip = static_cast<f64>(data[3]) * 0.4;
-                msg.selected_gear = data[4];
-                msg.current_gear = data[5];
-                msg.trans_requested_range = data[6];
-                msg.trans_current_range = data[7];
-            }
-            return msg;
-        }
-    };
-
-    // ─── Electronic Transmission Controller 2 (ETC2, PGN 61446 / 0x0F006) ───────
-    struct ETC2 {
-        f64 trans_oil_temp_c = -40.0;    // SPN 177: 0.03125 C/bit, offset -273
-        u8 trans_oil_level = 0xFF;       // SPN 3027: 0.4% per bit
-        f64 trans_oil_pressure_kpa = 0.0; // SPN 127: 4 kPa/bit
-        f64 trans_oil_filter_diff_pressure_kpa = 0.0; // SPN 3026: 0.5 kPa/bit
-        u8 trans_range_selected = 0xFF;  // SPN 524: -125 offset
-        u8 trans_range_attained = 0xFF;  // SPN 527: -125 offset
-
-        dp::Vector<u8> encode() const {
-            dp::Vector<u8> data(8, 0xFF);
-            u16 temp = static_cast<u16>((trans_oil_temp_c + 273.0) / 0.03125);
-            data[0] = static_cast<u8>(temp & 0xFF);
-            data[1] = static_cast<u8>((temp >> 8) & 0xFF);
-            data[2] = static_cast<u8>(trans_oil_pressure_kpa / 4.0);
-            data[3] = trans_oil_level;
-            data[4] = static_cast<u8>(trans_oil_filter_diff_pressure_kpa / 0.5);
-            data[5] = trans_range_selected;
-            data[6] = trans_range_attained;
-            return data;
-        }
-
-        static ETC2 decode(const dp::Vector<u8> &data) {
-            ETC2 msg;
-            if (data.size() >= 7) {
-                u16 temp = static_cast<u16>(data[0]) | (static_cast<u16>(data[1]) << 8);
-                msg.trans_oil_temp_c = temp * 0.03125 - 273.0;
-                msg.trans_oil_pressure_kpa = static_cast<f64>(data[2]) * 4.0;
-                msg.trans_oil_level = data[3];
-                msg.trans_oil_filter_diff_pressure_kpa = static_cast<f64>(data[4]) * 0.5;
-                msg.trans_range_selected = data[5];
-                msg.trans_range_attained = data[6];
-            }
-            return msg;
-        }
-    };
-
     // ─── Aftertreatment 1 (AT1, PGN 65269 / 0x0FEF5) ────────────────────────────
     struct Aftertreatment1 {
         f64 diesel_exhaust_fluid_tank_level = 0.0; // SPN 1761: 0.4% per bit
@@ -778,12 +696,6 @@ namespace agrobus::j1939 {
             net_.register_pgn_callback(PGN_VEHICLE_ID, [this](const Message &msg) {
                 on_vehicle_id.emit(VehicleIdentification::decode(msg.data), msg.source);
             });
-            net_.register_pgn_callback(PGN_ETC1, [this](const Message &msg) {
-                on_etc1.emit(ETC1::decode(msg.data), msg.source);
-            });
-            net_.register_pgn_callback(PGN_ETC2, [this](const Message &msg) {
-                on_etc2.emit(ETC2::decode(msg.data), msg.source);
-            });
             net_.register_pgn_callback(PGN_AT1, [this](const Message &msg) {
                 on_aftertreatment1.emit(Aftertreatment1::decode(msg.data), msg.source);
             });
@@ -843,12 +755,6 @@ namespace agrobus::j1939 {
         Result<void> send_vehicle_id(const VehicleIdentification &msg) {
             return net_.send(PGN_VEHICLE_ID, msg.encode(), cf_);
         }
-        Result<void> send_etc1(const ETC1 &msg) {
-            return net_.send(PGN_ETC1, msg.encode(), cf_, nullptr, Priority::Default);
-        }
-        Result<void> send_etc2(const ETC2 &msg) {
-            return net_.send(PGN_ETC2, msg.encode(), cf_, nullptr, Priority::Default);
-        }
         Result<void> send_aftertreatment1(const Aftertreatment1 &msg) {
             return net_.send(PGN_AT1, msg.encode(), cf_, nullptr, Priority::Default);
         }
@@ -871,8 +777,6 @@ namespace agrobus::j1939 {
         Event<EngineHours, Address> on_engine_hours;
         Event<FuelEconomy, Address> on_fuel_economy;
         Event<FuelConsumption, Address> on_fuel_consumption;
-        Event<ETC1, Address> on_etc1;
-        Event<ETC2, Address> on_etc2;
         Event<Aftertreatment1, Address> on_aftertreatment1;
         Event<Aftertreatment2, Address> on_aftertreatment2;
         Event<ComponentIdentification, Address> on_component_id;

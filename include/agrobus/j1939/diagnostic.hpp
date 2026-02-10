@@ -1486,11 +1486,15 @@ namespace agrobus::j1939 {
             DM7Command cmd;
             cmd.spn = spn;
             cmd.test_id = test_id;
-            return net_.send(PGN_DM7, cmd.encode(), cf_, destination);
+            ControlFunction dest_cf;
+            dest_cf.address = destination;
+            return net_.send(PGN_DM7, cmd.encode(), cf_, &dest_cf);
         }
 
         Result<void> send_dm8(const DM8TestResult &result, Address destination = BROADCAST_ADDRESS) {
-            return net_.send(PGN_DM8, result.encode(), cf_, destination);
+            ControlFunction dest_cf;
+            dest_cf.address = destination;
+            return net_.send(PGN_DM8, result.encode(), cf_, &dest_cf);
         }
 
         Result<void> send_dm12() {
@@ -1501,7 +1505,9 @@ namespace agrobus::j1939 {
         }
 
         Result<void> send_dm21(Address destination = BROADCAST_ADDRESS) {
-            return net_.send(PGN_DM21, dm21_data_.encode(), cf_, destination);
+            ControlFunction dest_cf;
+            dest_cf.address = destination;
+            return net_.send(PGN_DM21, dm21_data_.encode(), cf_, &dest_cf);
         }
 
         Result<void> send_dm23() {
