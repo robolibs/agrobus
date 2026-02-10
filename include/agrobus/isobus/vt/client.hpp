@@ -31,7 +31,7 @@ namespace agrobus::isobus::vt {
     };
 
     // ─── VT Version ─────────────────────────────────────────────────────────────
-    enum class VTVersion : u8 { Version3 = 3, Version4 = 4, Version5 = 5 };
+    enum class VTVersion : u8 { Version3 = 3, Version4 = 4, Version5 = 5, Version6 = 6 };
 
     // ─── Language Codes (ISO 639-1) ────────────────────────────────────────────
     // Two-letter language codes as used in ISO 11783-7
