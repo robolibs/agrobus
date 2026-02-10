@@ -165,15 +165,16 @@ namespace agrobus::isobus::fs {
             }
 
             // Build request
-            dp::Vector<u8> request(8, 0xFF);
+            dp::Vector<u8> request;
+            request.resize(4 + path.size());
             request[0] = static_cast<u8>(FSFunction::OpenFile);
             TAN tan = allocate_tan();
             request[1] = tan;
             request[2] = static_cast<u8>(path.size());
             request[3] = static_cast<u8>(flags);
 
-            // Add path (may require TP for long paths)
-            for (usize i = 0; i < path.size() && i + 4 < 8; ++i) {
+            // Add path
+            for (usize i = 0; i < path.size(); ++i) {
                 request[4 + i] = path[i];
             }
 
@@ -308,14 +309,15 @@ namespace agrobus::isobus::fs {
                 return;
             }
 
-            dp::Vector<u8> request(8, 0xFF);
+            dp::Vector<u8> request;
+            request.resize(3 + path.size());
             request[0] = static_cast<u8>(FSFunction::ChangeDirectory);
             TAN tan = allocate_tan();
             request[1] = tan;
             request[2] = static_cast<u8>(path.size());
 
             // Add path
-            for (usize i = 0; i < path.size() && i + 3 < 8; ++i) {
+            for (usize i = 0; i < path.size(); ++i) {
                 request[3 + i] = path[i];
             }
 

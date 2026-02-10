@@ -276,6 +276,7 @@ TEST(safe_mode_trigger) {
     tim.initialize();
     tim.set_rear_pto(true, true, 1000);  // Engage PTO
     tim.set_rear_hitch(true, 8000);      // Set hitch
+    tim.set_aux_valve_capabilities(0, true, true);  // Mark valve as supported
     tim.set_aux_valve(0, true, 5000);    // Open valve
 
     tecu.attach_tim_server(std::move(tim));

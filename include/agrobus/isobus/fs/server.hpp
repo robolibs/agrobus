@@ -604,14 +604,15 @@ namespace agrobus::isobus::fs {
                     u32 available = open_file.data->size() - open_file.position;
                     u32 to_read = std::min(static_cast<u32>(count), available);
 
-                    dp::Vector<u8> response(8, 0xFF);
+                    dp::Vector<u8> response;
+                    response.resize(4 + to_read);
                     response[0] = static_cast<u8>(FSFunction::ReadFile);
                     response[1] = tan;
                     response[2] = static_cast<u8>(FSError::Success);
                     response[3] = static_cast<u8>(to_read);
 
                     // Append data (may trigger TP if > 8 bytes total)
-                    for (u32 i = 0; i < to_read && response.size() < 8; ++i) {
+                    for (u32 i = 0; i < to_read; ++i) {
                         response[4 + i] = (*open_file.data)[open_file.position + i];
                     }
 
@@ -760,14 +761,15 @@ namespace agrobus::isobus::fs {
             auto &conn = clients_[client];
             const auto &cwd = conn.current_directory;
 
-            dp::Vector<u8> response(8, 0xFF);
+            dp::Vector<u8> response;
+            response.resize(4 + cwd.size());
             response[0] = static_cast<u8>(FSFunction::GetCurrentDirectory);
             response[1] = tan;
             response[2] = static_cast<u8>(FSError::Success);
             response[3] = static_cast<u8>(cwd.size());
 
             // Append path (will trigger TP if needed)
-            for (usize i = 0; i < cwd.size() && i + 4 < 8; ++i) {
+            for (usize i = 0; i < cwd.size(); ++i) {
                 response[4 + i] = cwd[i];
             }
 

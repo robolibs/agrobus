@@ -48,6 +48,9 @@ namespace agrobus::isobus::vt {
             if (str.size() >= 2) {
                 lc.code[0] = str[0];
                 lc.code[1] = str[1];
+            } else if (str.size() == 1) {
+                lc.code[0] = str[0];
+                lc.code[1] = ' '; // Pad with space
             }
             return lc;
         }
