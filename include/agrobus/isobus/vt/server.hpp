@@ -75,6 +75,8 @@ namespace agrobus::isobus::vt {
 
         Result<void> stop() {
             state_.transition(VTServerState::Disconnected);
+            // Save all versions to disk before stopping
+            save_all_versions();
             clients_.clear();
             echo::category("isobus.vt.server").info("VT Server stopped");
             return {};
@@ -83,6 +85,51 @@ namespace agrobus::isobus::vt {
         VTServerState state() const noexcept { return state_.state(); }
         u16 screen_width() const noexcept { return screen_width_; }
         u16 screen_height() const noexcept { return screen_height_; }
+
+        // ─── Persistent storage management ────────────────────────────────────────
+
+        // Set storage directory for all clients
+        void set_storage_path(const dp::String &path) {
+            for (auto &client : clients_) {
+                client.set_storage_path(path);
+            }
+        }
+
+        // Load all versions from disk for all clients
+        u32 load_all_versions() {
+            u32 total_loaded = 0;
+            for (auto &client : clients_) {
+                total_loaded += client.load_all_versions_from_disk();
+            }
+            if (total_loaded > 0) {
+                echo::category("isobus.vt.server").info("Loaded ", total_loaded, " versions from disk");
+            }
+            return total_loaded;
+        }
+
+        // Save all versions to disk for all clients
+        u32 save_all_versions() {
+            u32 total_saved = 0;
+            for (auto &client : clients_) {
+                total_saved += client.save_all_versions_to_disk();
+            }
+            if (total_saved > 0) {
+                echo::category("isobus.vt.server").debug("Saved ", total_saved, " versions to disk");
+            }
+            return total_saved;
+        }
+
+        // Cleanup expired versions for all clients
+        u32 cleanup_expired_versions(u32 max_age_days = 30) {
+            u32 total_deleted = 0;
+            for (auto &client : clients_) {
+                total_deleted += client.cleanup_expired_versions(max_age_days);
+            }
+            if (total_deleted > 0) {
+                echo::category("isobus.vt.server").info("Cleaned up ", total_deleted, " expired versions");
+            }
+            return total_deleted;
+        }
 
         // ─── Active Working Set management ────────────────────────────────────────
         Address active_working_set() const noexcept { return active_working_set_; }
