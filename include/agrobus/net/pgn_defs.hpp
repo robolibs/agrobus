@@ -32,12 +32,20 @@ namespace agrobus::net {
     inline constexpr PGN PGN_DM1 = 0xFECA;
     inline constexpr PGN PGN_DM2 = 0xFECB;
     inline constexpr PGN PGN_DM3 = 0xFECC;
+    inline constexpr PGN PGN_DM4 = 0xFECD; // Driver's Information Message
+    inline constexpr PGN PGN_DM6 = 0xFECF; // Pending DTCs
+    inline constexpr PGN PGN_DM7 = 0xE300; // Command Non-Continuously Monitored Test
+    inline constexpr PGN PGN_DM8 = 0xFED5; // Test Results
+    inline constexpr PGN PGN_DM10 = 0xFDA4; // Product/Software ID
     inline constexpr PGN PGN_DM11 = 0xFED3;
+    inline constexpr PGN PGN_DM12 = 0xFED1; // Emissions-Related Active DTCs
     inline constexpr PGN PGN_DM13 = 0xDF00;
     inline constexpr PGN PGN_DM14 = 0xD900; // Memory access request
     inline constexpr PGN PGN_DM15 = 0xD800; // Memory access response
     inline constexpr PGN PGN_DM16 = 0xD700; // Binary data transfer
+    inline constexpr PGN PGN_DM21 = 0xC200; // Diagnostic Readiness 2
     inline constexpr PGN PGN_DM22 = 0xC300;
+    inline constexpr PGN PGN_DM23 = 0xFDB2; // Previously MIL-OFF DTCs
     inline constexpr PGN PGN_DIAGNOSTIC_PROTOCOL_ID = 0xFD32;
     inline constexpr PGN PGN_ECU_IDENTIFICATION = 0xFDC5;
 

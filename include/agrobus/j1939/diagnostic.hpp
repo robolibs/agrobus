@@ -471,6 +471,267 @@ namespace agrobus::j1939 {
         }
     };
 
+    // ─── DM4: Driver's Information Message ──────────────────────────────────────
+    // Provides human-readable fault information to the driver
+    struct DM4Message {
+        LampStatus mil_status = LampStatus::NotAvailable;
+        LampStatus red_stop_lamp = LampStatus::NotAvailable;
+        LampStatus amber_warning = LampStatus::NotAvailable;
+        LampStatus protect_lamp = LampStatus::NotAvailable;
+        dp::Vector<DTC> dtcs;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            // Byte 1-2: Lamp status
+            data.push_back((static_cast<u8>(protect_lamp) << 6) | (static_cast<u8>(amber_warning) << 4) |
+                           (static_cast<u8>(red_stop_lamp) << 2) | static_cast<u8>(mil_status));
+            data.push_back(0xFF); // Flash not used in DM4
+            // DTCs
+            for (const auto &dtc : dtcs) {
+                auto bytes = dtc.encode();
+                data.insert(data.end(), bytes.begin(), bytes.end());
+            }
+            return data;
+        }
+
+        static DM4Message decode(const dp::Vector<u8> &data) {
+            DM4Message msg;
+            if (data.size() < 2)
+                return msg;
+            msg.mil_status = static_cast<LampStatus>(data[0] & 0x03);
+            msg.red_stop_lamp = static_cast<LampStatus>((data[0] >> 2) & 0x03);
+            msg.amber_warning = static_cast<LampStatus>((data[0] >> 4) & 0x03);
+            msg.protect_lamp = static_cast<LampStatus>((data[0] >> 6) & 0x03);
+            // Decode DTCs
+            for (usize i = 2; i + 3 < data.size(); i += 4) {
+                msg.dtcs.push_back(DTC::decode(&data[i]));
+            }
+            return msg;
+        }
+    };
+
+    // ─── DM6: Pending DTCs ───────────────────────────────────────────────────────
+    // DTCs that are not yet confirmed but may become active
+    struct DM6Message {
+        DiagnosticLamps lamps;
+        dp::Vector<DTC> pending_dtcs;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            auto lamp_bytes = lamps.encode();
+            data.insert(data.end(), lamp_bytes.begin(), lamp_bytes.end());
+            for (const auto &dtc : pending_dtcs) {
+                auto bytes = dtc.encode();
+                data.insert(data.end(), bytes.begin(), bytes.end());
+            }
+            return data;
+        }
+
+        static DM6Message decode(const dp::Vector<u8> &data) {
+            DM6Message msg;
+            if (data.size() < 2)
+                return msg;
+            msg.lamps = DiagnosticLamps::decode(&data[0]);
+            for (usize i = 2; i + 3 < data.size(); i += 4) {
+                msg.pending_dtcs.push_back(DTC::decode(&data[i]));
+            }
+            return msg;
+        }
+    };
+
+    // ─── DM7: Command Non-Continuously Monitored Test ───────────────────────────
+    // Request to execute a specific test
+    struct DM7Command {
+        u32 spn = 0;
+        u8 test_id = 0xFF;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data(8, 0xFF);
+            data[0] = static_cast<u8>(spn & 0xFF);
+            data[1] = static_cast<u8>((spn >> 8) & 0xFF);
+            data[2] = static_cast<u8>((spn >> 16) & 0x07);
+            data[3] = test_id;
+            return data;
+        }
+
+        static DM7Command decode(const dp::Vector<u8> &data) {
+            DM7Command cmd;
+            if (data.size() < 4)
+                return cmd;
+            cmd.spn = static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) |
+                      (static_cast<u32>(data[2] & 0x07) << 16);
+            cmd.test_id = data[3];
+            return cmd;
+        }
+    };
+
+    // ─── DM8: Test Results ───────────────────────────────────────────────────────
+    // Results from a non-continuously monitored test
+    struct DM8TestResult {
+        u32 spn = 0;
+        u8 test_id = 0xFF;
+        u8 test_result = 0xFF; // 0 = passed, 1 = failed, others defined by test
+        u16 test_value = 0xFFFF;
+        u16 test_limit_min = 0xFFFF;
+        u16 test_limit_max = 0xFFFF;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(static_cast<u8>(spn & 0xFF));
+            data.push_back(static_cast<u8>((spn >> 8) & 0xFF));
+            data.push_back(static_cast<u8>((spn >> 16) & 0x07));
+            data.push_back(test_id);
+            data.push_back(test_result);
+            data.push_back(static_cast<u8>(test_value & 0xFF));
+            data.push_back(static_cast<u8>((test_value >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(test_limit_min & 0xFF));
+            data.push_back(static_cast<u8>((test_limit_min >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(test_limit_max & 0xFF));
+            data.push_back(static_cast<u8>((test_limit_max >> 8) & 0xFF));
+            return data;
+        }
+
+        static DM8TestResult decode(const dp::Vector<u8> &data) {
+            DM8TestResult result;
+            if (data.size() < 11)
+                return result;
+            result.spn = static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) |
+                         (static_cast<u32>(data[2] & 0x07) << 16);
+            result.test_id = data[3];
+            result.test_result = data[4];
+            result.test_value = static_cast<u16>(data[5]) | (static_cast<u16>(data[6]) << 8);
+            result.test_limit_min = static_cast<u16>(data[7]) | (static_cast<u16>(data[8]) << 8);
+            result.test_limit_max = static_cast<u16>(data[9]) | (static_cast<u16>(data[10]) << 8);
+            return result;
+        }
+    };
+
+    // ─── DM10: Product/Software Identification (Enhanced) ───────────────────────
+    // Already have ProductIdentification, this extends it
+    struct DM10Extended {
+        ProductIdentification product_id;
+        SoftwareIdentification software_id;
+        dp::String ecu_serial_number;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data = product_id.encode();
+            auto sw_data = software_id.encode();
+            data.insert(data.end(), sw_data.begin(), sw_data.end());
+            for (char c : ecu_serial_number)
+                data.push_back(static_cast<u8>(c));
+            data.push_back('*');
+            return data;
+        }
+
+        static DM10Extended decode(const dp::Vector<u8> &data) {
+            DM10Extended dm10;
+            dm10.product_id = ProductIdentification::decode(data);
+            // Software ID and serial number would need more complex parsing
+            return dm10;
+        }
+    };
+
+    // ─── DM12: Emissions-Related Active DTCs ────────────────────────────────────
+    // Similar to DM1 but specifically for emissions-related faults
+    struct DM12Message {
+        DiagnosticLamps lamps;
+        dp::Vector<DTC> emissions_dtcs;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            auto lamp_bytes = lamps.encode();
+            data.insert(data.end(), lamp_bytes.begin(), lamp_bytes.end());
+            for (const auto &dtc : emissions_dtcs) {
+                auto bytes = dtc.encode();
+                data.insert(data.end(), bytes.begin(), bytes.end());
+            }
+            return data;
+        }
+
+        static DM12Message decode(const dp::Vector<u8> &data) {
+            DM12Message msg;
+            if (data.size() < 2)
+                return msg;
+            msg.lamps = DiagnosticLamps::decode(&data[0]);
+            for (usize i = 2; i + 3 < data.size(); i += 4) {
+                msg.emissions_dtcs.push_back(DTC::decode(&data[i]));
+            }
+            return msg;
+        }
+    };
+
+    // ─── DM21: Diagnostic Readiness 2 ───────────────────────────────────────────
+    // OBD monitor completion status
+    struct DM21Readiness {
+        u16 distance_with_mil_on_km = 0xFFFF;
+        u16 distance_since_codes_cleared_km = 0xFFFF;
+        u16 minutes_with_mil_on = 0xFFFF;
+        u16 time_since_codes_cleared_min = 0xFFFF;
+        // Monitor completion flags (bit 0 = complete, bit 1 = not complete)
+        u8 comprehensive_component = 0xFF;
+        u8 fuel_system = 0xFF;
+        u8 misfire = 0xFF;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(static_cast<u8>(distance_with_mil_on_km & 0xFF));
+            data.push_back(static_cast<u8>((distance_with_mil_on_km >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(distance_since_codes_cleared_km & 0xFF));
+            data.push_back(static_cast<u8>((distance_since_codes_cleared_km >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(minutes_with_mil_on & 0xFF));
+            data.push_back(static_cast<u8>((minutes_with_mil_on >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(time_since_codes_cleared_min & 0xFF));
+            data.push_back(static_cast<u8>((time_since_codes_cleared_min >> 8) & 0xFF));
+            data.push_back(comprehensive_component);
+            data.push_back(fuel_system);
+            data.push_back(misfire);
+            return data;
+        }
+
+        static DM21Readiness decode(const dp::Vector<u8> &data) {
+            DM21Readiness r;
+            if (data.size() < 11)
+                return r;
+            r.distance_with_mil_on_km = static_cast<u16>(data[0]) | (static_cast<u16>(data[1]) << 8);
+            r.distance_since_codes_cleared_km = static_cast<u16>(data[2]) | (static_cast<u16>(data[3]) << 8);
+            r.minutes_with_mil_on = static_cast<u16>(data[4]) | (static_cast<u16>(data[5]) << 8);
+            r.time_since_codes_cleared_min = static_cast<u16>(data[6]) | (static_cast<u16>(data[7]) << 8);
+            r.comprehensive_component = data[8];
+            r.fuel_system = data[9];
+            r.misfire = data[10];
+            return r;
+        }
+    };
+
+    // ─── DM23: Previously MIL-OFF DTCs ──────────────────────────────────────────
+    // DTCs that were active but MIL is now off (legacy)
+    struct DM23Message {
+        DiagnosticLamps lamps;
+        dp::Vector<DTC> previously_mil_off_dtcs;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            auto lamp_bytes = lamps.encode();
+            data.insert(data.end(), lamp_bytes.begin(), lamp_bytes.end());
+            for (const auto &dtc : previously_mil_off_dtcs) {
+                auto bytes = dtc.encode();
+                data.insert(data.end(), bytes.begin(), bytes.end());
+            }
+            return data;
+        }
+
+        static DM23Message decode(const dp::Vector<u8> &data) {
+            DM23Message msg;
+            if (data.size() < 2)
+                return msg;
+            msg.lamps = DiagnosticLamps::decode(&data[0]);
+            for (usize i = 2; i + 3 < data.size(); i += 4) {
+                msg.previously_mil_off_dtcs.push_back(DTC::decode(&data[i]));
+            }
+            return msg;
+        }
+    };
+
     // ─── Diagnostic Protocol (DM1/DM2/DM3/DM11/DM13/DM22/DM25) ──────────────────
     class DiagnosticProtocol {
         IsoNet &net_;
@@ -501,6 +762,12 @@ namespace agrobus::j1939 {
         // Monitor performance ratios (DM20)
         DM20Response dm20_data_;
 
+        // Optional DM messages (DM4, DM6, DM7, DM8, DM12, DM21, DM23)
+        dp::Vector<DTC> pending_dtcs_;          // DM6
+        dp::Vector<DTC> emissions_related_dtcs_; // DM12
+        dp::Vector<DTC> previously_mil_off_dtcs_; // DM23
+        DM21Readiness dm21_data_;                // DM21
+
       public:
         DiagnosticProtocol(IsoNet &net, InternalCF *cf, DiagnosticConfig config = {})
             : net_(net), cf_(cf), dm1_interval_ms_(config.dm1_interval_ms), auto_send_(config.auto_send),
@@ -518,9 +785,16 @@ namespace agrobus::j1939 {
             net_.register_pgn_callback(PGN_DM1, [this](const Message &msg) { handle_dm1(msg); });
             net_.register_pgn_callback(PGN_DM2, [this](const Message &msg) { handle_dm2(msg); });
             net_.register_pgn_callback(PGN_DM3, [this](const Message &msg) { handle_dm3_request(msg); });
+            net_.register_pgn_callback(PGN_DM4, [this](const Message &msg) { handle_dm4(msg); });
+            net_.register_pgn_callback(PGN_DM6, [this](const Message &msg) { handle_dm6(msg); });
+            net_.register_pgn_callback(PGN_DM7, [this](const Message &msg) { handle_dm7(msg); });
+            net_.register_pgn_callback(PGN_DM8, [this](const Message &msg) { handle_dm8(msg); });
             net_.register_pgn_callback(PGN_DM11, [this](const Message &msg) { handle_dm11(msg); });
+            net_.register_pgn_callback(PGN_DM12, [this](const Message &msg) { handle_dm12(msg); });
             net_.register_pgn_callback(PGN_DM13, [this](const Message &msg) { handle_dm13(msg); });
+            net_.register_pgn_callback(PGN_DM21, [this](const Message &msg) { handle_dm21(msg); });
             net_.register_pgn_callback(PGN_DM22, [this](const Message &msg) { handle_dm22(msg); });
+            net_.register_pgn_callback(PGN_DM23, [this](const Message &msg) { handle_dm23(msg); });
             net_.register_pgn_callback(PGN_PRODUCT_IDENTIFICATION,
                                        [this](const Message &msg) { handle_product_id(msg); });
             net_.register_pgn_callback(PGN_SOFTWARE_ID, [this](const Message &msg) { handle_software_id(msg); });
@@ -1135,5 +1409,126 @@ namespace agrobus::j1939 {
             // Auto-respond with freeze frame if available
             send_dm25_response(req.spn, req.fmi, req.frame_number, msg.source);
         }
+
+        // ─── DM4 Handler ──────────────────────────────────────────────────────────
+        void handle_dm4(const Message &msg) {
+            auto dm4 = DM4Message::decode(msg.data);
+            on_dm4_received.emit(dm4, msg.source);
+            echo::category("isobus.diagnostic").debug("DM4 received from ", msg.source, " with ", dm4.dtcs.size(), " DTCs");
+        }
+
+        // ─── DM6 Handler ──────────────────────────────────────────────────────────
+        void handle_dm6(const Message &msg) {
+            auto dm6 = DM6Message::decode(msg.data);
+            pending_dtcs_ = dm6.pending_dtcs;
+            on_dm6_received.emit(dm6, msg.source);
+            echo::category("isobus.diagnostic").debug("DM6 received from ", msg.source, " with ", dm6.pending_dtcs.size(), " pending DTCs");
+        }
+
+        // ─── DM7 Handler ──────────────────────────────────────────────────────────
+        void handle_dm7(const Message &msg) {
+            auto cmd = DM7Command::decode(msg.data);
+            on_dm7_received.emit(cmd, msg.source);
+            echo::category("isobus.diagnostic").debug("DM7 test command: SPN=", cmd.spn, " test_id=", cmd.test_id);
+        }
+
+        // ─── DM8 Handler ──────────────────────────────────────────────────────────
+        void handle_dm8(const Message &msg) {
+            auto result = DM8TestResult::decode(msg.data);
+            on_dm8_received.emit(result, msg.source);
+            echo::category("isobus.diagnostic").debug("DM8 test result: SPN=", result.spn, " result=", result.test_result);
+        }
+
+        // ─── DM12 Handler ─────────────────────────────────────────────────────────
+        void handle_dm12(const Message &msg) {
+            auto dm12 = DM12Message::decode(msg.data);
+            emissions_related_dtcs_ = dm12.emissions_dtcs;
+            on_dm12_received.emit(dm12, msg.source);
+            echo::category("isobus.diagnostic").debug("DM12 received from ", msg.source, " with ", dm12.emissions_dtcs.size(), " emissions DTCs");
+        }
+
+        // ─── DM21 Handler ─────────────────────────────────────────────────────────
+        void handle_dm21(const Message &msg) {
+            dm21_data_ = DM21Readiness::decode(msg.data);
+            on_dm21_received.emit(dm21_data_, msg.source);
+            echo::category("isobus.diagnostic").debug("DM21 readiness data received from ", msg.source);
+        }
+
+        // ─── DM23 Handler ─────────────────────────────────────────────────────────
+        void handle_dm23(const Message &msg) {
+            auto dm23 = DM23Message::decode(msg.data);
+            previously_mil_off_dtcs_ = dm23.previously_mil_off_dtcs;
+            on_dm23_received.emit(dm23, msg.source);
+            echo::category("isobus.diagnostic").debug("DM23 received from ", msg.source, " with ", dm23.previously_mil_off_dtcs.size(), " previously MIL-off DTCs");
+        }
+
+      public:
+        // ─── Public send methods for new DM codes ────────────────────────────────
+
+        Result<void> send_dm4() {
+            DM4Message msg;
+            msg.mil_status = lamps_.malfunction;
+            msg.red_stop_lamp = lamps_.red_stop;
+            msg.amber_warning = lamps_.amber_warning;
+            msg.protect_lamp = lamps_.engine_protect;
+            msg.dtcs = active_dtcs_;
+            return net_.send(PGN_DM4, msg.encode(), cf_);
+        }
+
+        Result<void> send_dm6() {
+            DM6Message msg;
+            msg.lamps = lamps_;
+            msg.pending_dtcs = pending_dtcs_;
+            return net_.send(PGN_DM6, msg.encode(), cf_);
+        }
+
+        Result<void> send_dm7(u32 spn, u8 test_id, Address destination) {
+            DM7Command cmd;
+            cmd.spn = spn;
+            cmd.test_id = test_id;
+            return net_.send(PGN_DM7, cmd.encode(), cf_, destination);
+        }
+
+        Result<void> send_dm8(const DM8TestResult &result, Address destination = BROADCAST_ADDRESS) {
+            return net_.send(PGN_DM8, result.encode(), cf_, destination);
+        }
+
+        Result<void> send_dm12() {
+            DM12Message msg;
+            msg.lamps = lamps_;
+            msg.emissions_dtcs = emissions_related_dtcs_;
+            return net_.send(PGN_DM12, msg.encode(), cf_);
+        }
+
+        Result<void> send_dm21(Address destination = BROADCAST_ADDRESS) {
+            return net_.send(PGN_DM21, dm21_data_.encode(), cf_, destination);
+        }
+
+        Result<void> send_dm23() {
+            DM23Message msg;
+            msg.lamps = lamps_;
+            msg.previously_mil_off_dtcs = previously_mil_off_dtcs_;
+            return net_.send(PGN_DM23, msg.encode(), cf_);
+        }
+
+        // Getters for new DM data
+        const dp::Vector<DTC> &pending_dtcs() const { return pending_dtcs_; }
+        const dp::Vector<DTC> &emissions_related_dtcs() const { return emissions_related_dtcs_; }
+        const dp::Vector<DTC> &previously_mil_off_dtcs() const { return previously_mil_off_dtcs_; }
+        const DM21Readiness &dm21_readiness() const { return dm21_data_; }
+
+        // Setters for new DM data
+        void add_pending_dtc(const DTC &dtc) { pending_dtcs_.push_back(dtc); }
+        void add_emissions_dtc(const DTC &dtc) { emissions_related_dtcs_.push_back(dtc); }
+        void set_dm21_readiness(const DM21Readiness &data) { dm21_data_ = data; }
+
+        // Events for new DM codes
+        Event<const DM4Message &, Address> on_dm4_received;
+        Event<const DM6Message &, Address> on_dm6_received;
+        Event<const DM7Command &, Address> on_dm7_received;
+        Event<const DM8TestResult &, Address> on_dm8_received;
+        Event<const DM12Message &, Address> on_dm12_received;
+        Event<const DM21Readiness &, Address> on_dm21_received;
+        Event<const DM23Message &, Address> on_dm23_received;
     };
 } // namespace agrobus::j1939
