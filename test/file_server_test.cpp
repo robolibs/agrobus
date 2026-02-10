@@ -3,6 +3,8 @@
 
 #include <agrobus.hpp>
 #include <echo/echo.hpp>
+#include <wirebit/can/socketcan_link.hpp>
+#include <wirebit/can/can_endpoint.hpp>
 #include <cassert>
 
 using namespace agrobus::net;
@@ -14,7 +16,49 @@ using namespace agrobus::isobus::fs;
 #define ASSERT(condition) do { if (!(condition)) { echo::error("Assertion failed: " #condition); assert(false); } } while(0)
 #define ASSERT_EQ(a, b) do { if ((a) != (b)) { echo::error("Assertion failed: " #a " == " #b); assert(false); } } while(0)
 
-// Helper to simulate network updates
+// vcan0 test setup
+struct VcanSetup {
+    std::shared_ptr<wirebit::SocketCanLink> link;
+    wirebit::CanEndpoint endpoint;
+    IsoNet net;
+
+    VcanSetup()
+        : link(std::make_shared<wirebit::SocketCanLink>(
+              wirebit::SocketCanLink::attach("vcan0").value())),
+          endpoint(link, wirebit::CanConfig{}, 0) {
+        net.set_endpoint(0, &endpoint);
+    }
+
+    void tick(u32 elapsed_ms = 100) {
+        // Multiple updates to ensure frames are sent and received
+        net.update(elapsed_ms);
+        net.update(0);
+        net.update(0);
+        net.update(0);
+    }
+};
+
+// Helper for dual-network updates (server and client on separate vcan endpoints)
+void update_dual_network(VcanSetup &server_net, VcanSetup &client_net,
+                         FileServerEnhanced &server, FileClient &client, u32 times, u32 interval_ms = 100) {
+    for (u32 i = 0; i < times; ++i) {
+        server_net.tick(interval_ms);
+        client_net.tick(interval_ms);
+        server.update(interval_ms);
+        client.update(interval_ms);
+    }
+}
+
+// Helper to simulate network updates with vcan (legacy single-network)
+void update_network(VcanSetup &setup, FileServerEnhanced &server, FileClient &client, u32 times, u32 interval_ms = 100) {
+    for (u32 i = 0; i < times; ++i) {
+        setup.tick(interval_ms);
+        server.update(interval_ms);
+        client.update(interval_ms);
+    }
+}
+
+// Legacy helper for tests that don't need network
 void update_network(IsoNet &net, FileServerEnhanced &server, FileClient &client, u32 times, u32 interval_ms = 100) {
     for (u32 i = 0; i < times; ++i) {
         net.update(interval_ms);
@@ -180,14 +224,16 @@ TEST(tan_cache_expiration) {
 
 // ─── Test 5: Connection Management ────────────────────────────────────────────
 TEST(connection_ccm_flow) {
-    IsoNet net;
-    auto server_cf = net.create_internal(Name::build().set_identity_number(102), 0, 0xA1).value();
-    auto client_cf = net.create_internal(Name::build().set_identity_number(103), 0, 0xB1).value();
+    // Use two separate networks on same vcan0 (like e2e tests)
+    VcanSetup server_net, client_net;
 
-    FileServerEnhanced server(net, server_cf);
+    auto server_cf = server_net.net.create_internal(Name::build().set_identity_number(102), 0, 0xA1).value();
+    auto client_cf = client_net.net.create_internal(Name::build().set_identity_number(103), 0, 0xB1).value();
+
+    FileServerEnhanced server(server_net.net, server_cf);
     server.initialize();
 
-    FileClient client(net, client_cf);
+    FileClient client(client_net.net, client_cf);
     client.initialize();
 
     bool connected = false;
@@ -197,8 +243,13 @@ TEST(connection_ccm_flow) {
 
     client.connect_to_server(0xA1);
 
-    // Update to allow connection
-    update_network(net, server, client, 30);
+    // Update both networks to allow communication
+    for (u32 i = 0; i < 50 && !connected; ++i) {
+        server_net.tick(100);
+        client_net.tick(100);
+        server.update(100);
+        client.update(100);
+    }
 
     ASSERT(connected);
     ASSERT(client.is_connected());
@@ -207,7 +258,8 @@ TEST(connection_ccm_flow) {
 }
 
 TEST(connection_timeout_disconnect) {
-    IsoNet net;
+    VcanSetup setup;
+    IsoNet &net = setup.net;
     auto server_cf = net.create_internal(Name::build().set_identity_number(104), 0, 0xA2).value();
     auto client_cf = net.create_internal(Name::build().set_identity_number(105), 0, 0xB2).value();
 
@@ -227,7 +279,7 @@ TEST(connection_timeout_disconnect) {
 
     // Connect client
     client.connect_to_server(0xA2);
-    update_network(net, server, client, 20);
+    update_network(setup, server, client, 20);
 
     // Stop client updates (no more CCM)
     for (u32 i = 0; i < 40; ++i) {
@@ -243,19 +295,20 @@ TEST(connection_timeout_disconnect) {
 
 // ─── Test 6: File Operations ──────────────────────────────────────────────────
 TEST(file_operations_open_read_close) {
-    IsoNet net;
-    auto server_cf = net.create_internal(Name::build().set_identity_number(106), 0, 0xA3).value();
-    auto client_cf = net.create_internal(Name::build().set_identity_number(107), 0, 0xB3).value();
+    VcanSetup server_net, client_net;
+    
+    auto server_cf = server_net.net.create_internal(Name::build().set_identity_number(106), 0, 0xA3).value();
+    auto client_cf = client_net.net.create_internal(Name::build().set_identity_number(107), 0, 0xB3).value();
 
-    FileServerEnhanced server(net, server_cf);
+    FileServerEnhanced server(server_net.net, server_cf);
     server.initialize();
     server.add_file("\\README.TXT", dp::Vector<u8>{'H', 'E', 'L', 'L', 'O'});
 
-    FileClient client(net, client_cf);
+    FileClient client(client_net.net, client_cf);
     client.initialize();
     client.connect_to_server(0xA3);
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     FileHandle handle = INVALID_FILE_HANDLE;
     bool open_complete = false;
@@ -268,7 +321,7 @@ TEST(file_operations_open_read_close) {
             }
         });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     ASSERT(open_complete);
     ASSERT(handle != INVALID_FILE_HANDLE);
@@ -285,7 +338,7 @@ TEST(file_operations_open_read_close) {
             }
         });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     ASSERT(read_complete);
     ASSERT_EQ(data.size(), 5u);
@@ -294,24 +347,25 @@ TEST(file_operations_open_read_close) {
 
     // Close file
     client.close_file(handle);
-    update_network(net, server, client, 10);
+    update_dual_network(server_net, client_net, server, client, 10);
 
     echo::info("  File open/read/close correct");
 }
 
 TEST(file_operations_write) {
-    IsoNet net;
-    auto server_cf = net.create_internal(Name::build().set_identity_number(108), 0, 0xA4).value();
-    auto client_cf = net.create_internal(Name::build().set_identity_number(109), 0, 0xB4).value();
+    VcanSetup server_net, client_net;
+    
+    auto server_cf = server_net.net.create_internal(Name::build().set_identity_number(108), 0, 0xA4).value();
+    auto client_cf = client_net.net.create_internal(Name::build().set_identity_number(109), 0, 0xB4).value();
 
-    FileServerEnhanced server(net, server_cf);
+    FileServerEnhanced server(server_net.net, server_cf);
     server.initialize();
 
-    FileClient client(net, client_cf);
+    FileClient client(client_net.net, client_cf);
     client.initialize();
     client.connect_to_server(0xA4);
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     FileHandle handle = INVALID_FILE_HANDLE;
 
@@ -323,7 +377,7 @@ TEST(file_operations_write) {
             }
         });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
     ASSERT(handle != INVALID_FILE_HANDLE);
 
     // Write data
@@ -337,29 +391,30 @@ TEST(file_operations_write) {
             }
         });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
     ASSERT(write_complete);
 
     client.close_file(handle);
-    update_network(net, server, client, 10);
+    update_dual_network(server_net, client_net, server, client, 10);
 
     echo::info("  File write operations correct");
 }
 
 TEST(file_operations_seek) {
-    IsoNet net;
-    auto server_cf = net.create_internal(Name::build().set_identity_number(110), 0, 0xA5).value();
-    auto client_cf = net.create_internal(Name::build().set_identity_number(111), 0, 0xB5).value();
+    VcanSetup server_net, client_net;
+    
+    auto server_cf = server_net.net.create_internal(Name::build().set_identity_number(110), 0, 0xA5).value();
+    auto client_cf = client_net.net.create_internal(Name::build().set_identity_number(111), 0, 0xB5).value();
 
-    FileServerEnhanced server(net, server_cf);
+    FileServerEnhanced server(server_net.net, server_cf);
     server.initialize();
     server.add_file("\\DATA.BIN", dp::Vector<u8>{'A', 'B', 'C', 'D', 'E', 'F'});
 
-    FileClient client(net, client_cf);
+    FileClient client(client_net.net, client_cf);
     client.initialize();
     client.connect_to_server(0xA5);
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     FileHandle handle = INVALID_FILE_HANDLE;
 
@@ -368,7 +423,7 @@ TEST(file_operations_seek) {
             if (result.is_ok()) handle = result.value();
         });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     // Seek to position 3
     bool seek_complete = false;
@@ -377,7 +432,7 @@ TEST(file_operations_seek) {
             if (result.is_ok()) seek_complete = true;
         });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
     ASSERT(seek_complete);
 
     // Read should return 'D' (position 3)
@@ -387,37 +442,38 @@ TEST(file_operations_seek) {
             if (result.is_ok()) data = result.value();
         });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
     ASSERT_EQ(data.size(), 1u);
     ASSERT_EQ(data[0], 'D');
 
     client.close_file(handle);
-    update_network(net, server, client, 10);
+    update_dual_network(server_net, client_net, server, client, 10);
 
     echo::info("  File seek operations correct");
 }
 
 // ─── Test 7: Directory Operations ─────────────────────────────────────────────
 TEST(directory_get_current) {
-    IsoNet net;
-    auto server_cf = net.create_internal(Name::build().set_identity_number(112), 0, 0xA6).value();
-    auto client_cf = net.create_internal(Name::build().set_identity_number(113), 0, 0xB6).value();
+    VcanSetup server_net, client_net;
+    
+    auto server_cf = server_net.net.create_internal(Name::build().set_identity_number(112), 0, 0xA6).value();
+    auto client_cf = client_net.net.create_internal(Name::build().set_identity_number(113), 0, 0xB6).value();
 
-    FileServerEnhanced server(net, server_cf);
+    FileServerEnhanced server(server_net.net, server_cf);
     server.initialize();
 
-    FileClient client(net, client_cf);
+    FileClient client(client_net.net, client_cf);
     client.initialize();
     client.connect_to_server(0xA6);
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     dp::String current_dir;
     client.get_current_directory([&current_dir](Result<dp::String> result) {
         if (result.is_ok()) current_dir = result.value();
     });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     ASSERT_EQ(current_dir, "\\");
 
@@ -425,19 +481,20 @@ TEST(directory_get_current) {
 }
 
 TEST(directory_change) {
-    IsoNet net;
-    auto server_cf = net.create_internal(Name::build().set_identity_number(114), 0, 0xA7).value();
-    auto client_cf = net.create_internal(Name::build().set_identity_number(115), 0, 0xB7).value();
+    VcanSetup server_net, client_net;
+    
+    auto server_cf = server_net.net.create_internal(Name::build().set_identity_number(114), 0, 0xA7).value();
+    auto client_cf = client_net.net.create_internal(Name::build().set_identity_number(115), 0, 0xB7).value();
 
-    FileServerEnhanced server(net, server_cf);
+    FileServerEnhanced server(server_net.net, server_cf);
     server.initialize();
     server.add_directory("\\DATA\\");
 
-    FileClient client(net, client_cf);
+    FileClient client(client_net.net, client_cf);
     client.initialize();
     client.connect_to_server(0xA7);
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     // Change to DATA directory
     bool change_complete = false;
@@ -445,7 +502,7 @@ TEST(directory_change) {
         if (result.is_ok()) change_complete = true;
     });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
     ASSERT(change_complete);
 
     // Verify current directory
@@ -454,34 +511,35 @@ TEST(directory_change) {
         if (result.is_ok()) current_dir = result.value();
     });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
     ASSERT_EQ(current_dir, "DATA");
 
     echo::info("  Change directory correct");
 }
 
 TEST(directory_parent_navigation) {
-    IsoNet net;
-    auto server_cf = net.create_internal(Name::build().set_identity_number(116), 0, 0xA8).value();
-    auto client_cf = net.create_internal(Name::build().set_identity_number(117), 0, 0xB8).value();
+    VcanSetup server_net, client_net;
+    
+    auto server_cf = server_net.net.create_internal(Name::build().set_identity_number(116), 0, 0xA8).value();
+    auto client_cf = client_net.net.create_internal(Name::build().set_identity_number(117), 0, 0xB8).value();
 
-    FileServerEnhanced server(net, server_cf);
+    FileServerEnhanced server(server_net.net, server_cf);
     server.initialize();
     server.add_directory("\\DATA\\");
     server.add_directory("\\DATA\\SUB\\");
 
-    FileClient client(net, client_cf);
+    FileClient client(client_net.net, client_cf);
     client.initialize();
     client.connect_to_server(0xA8);
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     // Change to DATA\SUB
     client.change_directory("DATA", [](Result<void> result) {});
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     client.change_directory("SUB", [](Result<void> result) {});
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
 
     // Go to parent (..)
     bool parent_complete = false;
@@ -489,7 +547,7 @@ TEST(directory_parent_navigation) {
         if (result.is_ok()) parent_complete = true;
     });
 
-    update_network(net, server, client, 20);
+    update_dual_network(server_net, client_net, server, client, 20);
     ASSERT(parent_complete);
 
     echo::info("  Parent directory navigation correct");
@@ -600,25 +658,26 @@ TEST(volume_state_timeout_enforcement) {
 
 // ─── Test 9: Multi-Client Isolation ───────────────────────────────────────────
 TEST(multi_client_handle_isolation) {
-    IsoNet net;
-    auto server_cf = net.create_internal(Name::build().set_identity_number(122), 0, 0xAD).value();
-    auto client1_cf = net.create_internal(Name::build().set_identity_number(123), 0, 0xB9).value();
-    auto client2_cf = net.create_internal(Name::build().set_identity_number(124), 0, 0xBA).value();
+    VcanSetup server_net, client1_net, client2_net;
+    
+    auto server_cf = server_net.net.create_internal(Name::build().set_identity_number(122), 0, 0xAD).value();
+    auto client1_cf = client1_net.net.create_internal(Name::build().set_identity_number(123), 0, 0xB9).value();
+    auto client2_cf = client2_net.net.create_internal(Name::build().set_identity_number(124), 0, 0xBA).value();
 
-    FileServerEnhanced server(net, server_cf);
+    FileServerEnhanced server(server_net.net, server_cf);
     server.initialize();
     server.add_file("\\SHARED.TXT", dp::Vector<u8>{'S', 'H', 'A', 'R', 'E', 'D'});
 
-    FileClient client1(net, client1_cf);
+    FileClient client1(client1_net.net, client1_cf);
     client1.initialize();
     client1.connect_to_server(0xAD);
 
-    FileClient client2(net, client2_cf);
+    FileClient client2(client2_net.net, client2_cf);
     client2.initialize();
     client2.connect_to_server(0xAD);
 
-    update_network(net, server, client1, 20);
-    update_network(net, server, client2, 20);
+    update_dual_network(server_net, client1_net, server, client1, 20);
+    update_dual_network(server_net, client2_net, server, client2, 20);
 
     // Both clients open the same file
     FileHandle handle1 = INVALID_FILE_HANDLE;
@@ -629,14 +688,14 @@ TEST(multi_client_handle_isolation) {
             if (result.is_ok()) handle1 = result.value();
         });
 
-    update_network(net, server, client1, 20);
+    update_dual_network(server_net, client1_net, server, client1, 20);
 
     client2.open_file("\\SHARED.TXT", OpenFlags::Read,
         [&handle2](Result<FileHandle> result) {
             if (result.is_ok()) handle2 = result.value();
         });
 
-    update_network(net, server, client2, 20);
+    update_dual_network(server_net, client2_net, server, client2, 20);
 
     // Handles should be different
     ASSERT(handle1 != INVALID_FILE_HANDLE);
