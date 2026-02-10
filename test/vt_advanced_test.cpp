@@ -327,12 +327,12 @@ TEST_CASE("MacroBody encode and decode") {
     SUBCASE("single command macro") {
         MacroBody body;
         MacroCommand cmd;
-        cmd.command_type = 0xA0; // HideShowObject
-        cmd.parameters = {0x01, 0x02, 0x03};
+        cmd.command_type = 0xA0; // HideShowObject (requires 5 parameters)
+        cmd.parameters = {0x01, 0x02, 0x03, 0x04, 0x05}; // obj_id_lo, obj_id_hi, hide_show, x, y
         body.commands.push_back(cmd);
 
         auto encoded = body.encode();
-        CHECK(encoded.size() >= 4); // command_id + data
+        CHECK(encoded.size() == 6); // 1 cmd + 5 params
 
         auto decoded = MacroBody::decode(encoded);
         CHECK(decoded.is_ok());
@@ -343,33 +343,33 @@ TEST_CASE("MacroBody encode and decode") {
     SUBCASE("multiple command macro") {
         MacroBody body;
 
-        // Command 1: HideShowObject
+        // Command 1: HideShowObject (0xA0, needs 5 parameters)
         MacroCommand cmd1;
         cmd1.command_type = 0xA0;
-        cmd1.parameters = {0x10, 0x00, 0x01}; // 3 bytes
+        cmd1.parameters = {0x10, 0x00, 0x01, 0x00, 0x00}; // 5 bytes
         body.commands.push_back(cmd1);
 
-        // Command 2: ChangeActiveMask
+        // Command 2: Control Audio Signal (0xA3, needs 3 parameters)
         MacroCommand cmd2;
-        cmd2.command_type = 0xA4;
-        cmd2.parameters = {0x20, 0x00, 0x00, 0xFF}; // 4 bytes
+        cmd2.command_type = 0xA3;
+        cmd2.parameters = {0x20, 0x00, 0xFF}; // 3 bytes
         body.commands.push_back(cmd2);
 
-        // Command 3: ChangePriority
+        // Command 3: Change Active Mask (0xAD, needs 3 parameters)
         MacroCommand cmd3;
-        cmd3.command_type = 0xAC;
+        cmd3.command_type = 0xAD;
         cmd3.parameters = {0x30, 0x00, 0x02}; // 3 bytes
         body.commands.push_back(cmd3);
 
         auto encoded = body.encode();
-        CHECK(encoded.size() >= 13); // 3 command_ids + 10 data bytes
+        CHECK(encoded.size() == 14); // 3 commands (1+5, 1+3, 1+3)
 
         auto decoded = MacroBody::decode(encoded);
         CHECK(decoded.is_ok());
         CHECK(decoded.value().commands.size() == 3);
         CHECK(decoded.value().commands[0].command_type == 0xA0);
-        CHECK(decoded.value().commands[1].command_type == 0xA4);
-        CHECK(decoded.value().commands[2].command_type == 0xAC);
+        CHECK(decoded.value().commands[1].command_type == 0xA3);
+        CHECK(decoded.value().commands[2].command_type == 0xAD);
     }
 
     SUBCASE("decode truncated data") {
