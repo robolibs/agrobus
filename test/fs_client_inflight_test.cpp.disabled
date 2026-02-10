@@ -1,0 +1,226 @@
+#include <doctest/doctest.h>
+#include <agrobus.hpp>
+#include <wirebit/can/socketcan_link.hpp>
+#include <wirebit/can/can_endpoint.hpp>
+
+using namespace agrobus::net;
+using namespace agrobus::j1939;
+using namespace agrobus::isobus;
+using namespace agrobus::nmea;
+using namespace agrobus::isobus::vt;
+using namespace agrobus::isobus::tc;
+using namespace agrobus::isobus::sc;
+using namespace agrobus::isobus::implement;
+using namespace agrobus::isobus::fs;
+
+// Helper: create a frame that looks like a file server response
+static Frame make_server_response(Address server_addr, Address client_addr, FileOperation op, FileTransferError err,
+                                  u8 extra = 0) {
+    dp::Array<u8, 8> data = {};
+    data[0] = static_cast<u8>(op);
+    data[1] = static_cast<u8>(err);
+    data[2] = extra;
+    for (u8 i = 3; i < 8; ++i)
+        data[i] = 0xFF;
+    return Frame(Identifier::encode(Priority::Default, PGN_FILE_SERVER_TO_CLIENT, server_addr, client_addr), data);
+}
+
+struct ClientSetup {
+    std::shared_ptr<wirebit::SocketCanLink> dut_link;
+    std::shared_ptr<wirebit::SocketCanLink> harness_link;
+    wirebit::CanEndpoint dut_ep;
+    wirebit::CanEndpoint harness_ep;
+    IsoNet nm;
+    InternalCF *cf = nullptr;
+    fs::FileClient *client = nullptr;
+
+    ClientSetup()
+        : dut_link(std::make_shared<wirebit::SocketCanLink>(
+              wirebit::SocketCanLink::create({.interface_name = "vcan_fs_cli", .create_if_missing = true, .destroy_on_close = true}).value())),
+          harness_link(std::make_shared<wirebit::SocketCanLink>(
+              wirebit::SocketCanLink::attach("vcan_fs_cli").value())),
+          dut_ep(dut_link, wirebit::CanConfig{}, 1),
+          harness_ep(harness_link, wirebit::CanConfig{}, 2) {
+        nm.set_endpoint(0, &dut_ep);
+        cf = nm.create_internal(Name::build().set_identity_number(1).set_manufacturer_code(100), 0, 0x10).value();
+        client = new fs::FileClient(nm, cf);
+        client->initialize();
+    }
+
+    ~ClientSetup() { delete client; }
+
+    void inject_response(FileOperation op, FileTransferError err = FileTransferError::NoError, u8 extra = 0) {
+        Frame f = make_server_response(0x20, 0x10, op, err, extra);
+        can_frame cf = wirebit::CanEndpoint::make_ext_frame(f.id.raw, f.data.data(), f.length);
+        harness_ep.send_can(cf);
+        nm.update(0);
+    }
+};
+
+TEST_CASE("fs::FileClient - one-inflight rule: single request succeeds") {
+    ClientSetup setup;
+
+    CHECK_FALSE(setup.client->is_request_pending());
+    auto result = setup.client->request_open("test.bin");
+    CHECK(result.is_ok());
+    CHECK(setup.client->is_request_pending());
+}
+
+TEST_CASE("fs::FileClient - one-inflight rule: second request while first pending returns error") {
+    ClientSetup setup;
+
+    auto r1 = setup.client->request_open("file1.bin");
+    CHECK(r1.is_ok());
+    CHECK(setup.client->is_request_pending());
+
+    // Second request while first is pending must fail
+    auto r2 = setup.client->request_open("file2.bin");
+    CHECK(r2.is_err());
+    CHECK(r2.error().code == ErrorCode::InvalidState);
+}
+
+TEST_CASE("fs::FileClient - one-inflight rule: response clears pending state") {
+    ClientSetup setup;
+
+    // Send open request
+    auto r1 = setup.client->request_open("test.bin");
+    CHECK(r1.is_ok());
+    CHECK(setup.client->is_request_pending());
+
+    // Inject a server response frame
+    setup.inject_response(FileOperation::OpenFile, FileTransferError::NoError, 0x01);
+
+    // After response, pending should be cleared
+    CHECK_FALSE(setup.client->is_request_pending());
+
+    // Now a new request should succeed
+    auto r2 = setup.client->request_list();
+    CHECK(r2.is_ok());
+    CHECK(setup.client->is_request_pending());
+}
+
+TEST_CASE("fs::FileClient - one-inflight rule: timeout clears pending after 6s") {
+    ClientSetup setup;
+
+    bool timeout_fired = false;
+    setup.client->on_timeout.subscribe([&]() { timeout_fired = true; });
+
+    auto r1 = setup.client->request_open("test.bin");
+    CHECK(r1.is_ok());
+    CHECK(setup.client->is_request_pending());
+
+    // Advance time but not enough for timeout
+    setup.client->update(3000);
+    CHECK(setup.client->is_request_pending());
+    CHECK_FALSE(timeout_fired);
+
+    // Still under threshold
+    setup.client->update(2999);
+    CHECK(setup.client->is_request_pending());
+    CHECK_FALSE(timeout_fired);
+
+    // Now exceed the 6000ms threshold
+    setup.client->update(2);
+    CHECK_FALSE(setup.client->is_request_pending());
+    CHECK(timeout_fired);
+}
+
+TEST_CASE("fs::FileClient - one-inflight rule: different operations all respect one-inflight") {
+    ClientSetup setup;
+
+    SUBCASE("open blocks list") {
+        CHECK(setup.client->request_open("a.bin").is_ok());
+        CHECK(setup.client->request_list().is_err());
+    }
+
+    SUBCASE("list blocks open") {
+        CHECK(setup.client->request_list().is_ok());
+        CHECK(setup.client->request_open("a.bin").is_err());
+    }
+
+    SUBCASE("open blocks delete") {
+        CHECK(setup.client->request_open("a.bin").is_ok());
+        CHECK(setup.client->request_delete("b.bin").is_err());
+    }
+
+    SUBCASE("open blocks close") {
+        CHECK(setup.client->request_open("a.bin").is_ok());
+        CHECK(setup.client->request_close(1).is_err());
+    }
+
+    SUBCASE("close blocks open") {
+        CHECK(setup.client->request_close(1).is_ok());
+        CHECK(setup.client->request_open("a.bin").is_err());
+    }
+
+    SUBCASE("delete blocks list") {
+        CHECK(setup.client->request_delete("a.bin").is_ok());
+        CHECK(setup.client->request_list().is_err());
+    }
+}
+
+TEST_CASE("fs::FileServerEnhanced - busy cadence switches between 200ms busy and 2000ms idle") {
+    IsoNet nm;
+    auto *cf = nm.create_internal(Name::build().set_identity_number(1), 0, 0x10).value();
+
+    fs::FileServerEnhanced server(nm, cf, FileServerConfig{}.path("/data"));
+    server.initialize();
+
+    SUBCASE("idle uses 2000ms interval") {
+        CHECK_FALSE(server.is_busy());
+        CHECK(server.effective_status_interval() == 2000);
+    }
+
+    SUBCASE("busy uses 200ms interval") {
+        server.set_busy(true);
+        CHECK(server.is_busy());
+        CHECK(server.effective_status_interval() == 200);
+    }
+
+    SUBCASE("toggling busy changes interval") {
+        server.set_busy(true);
+        CHECK(server.effective_status_interval() == 200);
+        server.set_busy(false);
+        CHECK(server.effective_status_interval() == 2000);
+    }
+
+    SUBCASE("busy server sends status more frequently") {
+        auto busy_link = std::make_shared<wirebit::SocketCanLink>(
+            wirebit::SocketCanLink::create({.interface_name = "vcan_fs_busy", .create_if_missing = true, .destroy_on_close = true}).value());
+        auto harness_link2 = std::make_shared<wirebit::SocketCanLink>(
+            wirebit::SocketCanLink::attach("vcan_fs_busy").value());
+        wirebit::CanEndpoint busy_ep(busy_link, wirebit::CanConfig{}, 3);
+        wirebit::CanEndpoint harness_ep2(harness_link2, wirebit::CanConfig{}, 4);
+
+        IsoNet nm2;
+        nm2.set_endpoint(0, &busy_ep);
+        auto *cf2 = nm2.create_internal(Name::build().set_identity_number(2), 0, 0x20).value();
+
+        fs::FileServerEnhanced busy_server(nm2, cf2, FileServerConfig{}.path("/data"));
+        busy_server.initialize();
+        busy_server.set_busy(true);
+
+        // With busy cadence of 200ms, updating by 201ms should send a status
+        busy_server.update(201);
+        nm2.update(0);
+
+        // Check if harness received at least one frame
+        can_frame rx;
+        bool got_frame = harness_ep2.recv_can(rx).is_ok();
+        CHECK(got_frame); // At least one status message sent
+
+        // In idle mode, 199ms should NOT trigger status (2000ms interval)
+        busy_server.set_busy(false);
+        busy_server.update(199);
+        nm2.update(0);
+
+        // Drain any remaining frames from the previous send
+        while (harness_ep2.recv_can(rx).is_ok()) {}
+
+        // After draining, no new frames should appear for idle at 199ms
+        busy_server.update(1);
+        nm2.update(0);
+        bool no_frame = !harness_ep2.recv_can(rx).is_ok();
+        CHECK(no_frame);
+    }
+}
