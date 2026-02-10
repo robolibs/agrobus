@@ -639,8 +639,15 @@ namespace agrobus::isobus {
                 }
 
                 // Update power outputs based on requests
-                ecu_pwr_enabled_ = any_ecu_pwr_requested;
-                pwr_enabled_ = any_pwr_requested;
+                // During minimum hold period, keep power on to allow CFs to send first request
+                if (shutdown_timer_ms_ < config_.power.maintain_timeout_ms) {
+                    ecu_pwr_enabled_ = true;
+                    pwr_enabled_ = true;
+                } else {
+                    // After minimum hold, only maintain if requested
+                    ecu_pwr_enabled_ = any_ecu_pwr_requested;
+                    pwr_enabled_ = any_pwr_requested;
+                }
 
                 // Check shutdown conditions
                 if (shutdown_timer_ms_ >= config_.power.shutdown_max_time_ms) {
