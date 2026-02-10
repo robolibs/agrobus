@@ -171,10 +171,10 @@ TEST_CASE("KeyBody encode and decode") {
     }
 
     SUBCASE("key with different key codes") {
-        for (u8 code = 0; code < 255; code += 10) {
+        for (u16 code = 0; code < 255; code += 10) {
             KeyBody body;
             body.background_color = 1;
-            body.key_code = code;
+            body.key_code = static_cast<u8>(code);
             body.options = 0x00;
 
             auto encoded = body.encode();
