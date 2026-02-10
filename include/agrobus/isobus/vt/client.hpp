@@ -104,6 +104,47 @@ namespace agrobus::isobus::vt {
         void set_object_pool(ObjectPool pool) { pool_ = std::move(pool); }
         void set_working_set(WorkingSet ws) { working_set_ = std::move(ws); }
 
+        // ─── Dynamic Pool Swapping ────────────────────────────────────────────────
+        // Swap the object pool at runtime without disconnecting
+        // Use cases: language changes, theme switching, dynamic UI updates
+        Result<void> swap_pool(ObjectPool new_pool, bool store_old = false, const dp::String &old_label = "") {
+            if (state_.state() != VTState::Connected) {
+                return Result<void>::err(Error::not_connected());
+            }
+            if (new_pool.empty()) {
+                return Result<void>::err(Error::invalid_state("new pool is empty"));
+            }
+
+            // Optionally store the current pool before swapping
+            if (store_old && !old_label.empty()) {
+                echo::category("isobus.vt.client").info("Storing current pool as: ", old_label);
+                auto result = store_version(old_label);
+                if (!result.is_ok()) {
+                    echo::category("isobus.vt.client").warn("Failed to store old pool");
+                }
+            }
+
+            // Replace the pool and trigger re-upload
+            pool_ = std::move(new_pool);
+            state_.transition(VTState::UploadPool);
+            timer_ms_ = 0;
+
+            echo::category("isobus.vt.client").info("Swapping object pool (", pool_.objects.size(), " objects)");
+            return {};
+        }
+
+        // Load a pool from a stored version (existing functionality)
+        // This is an alternative to swap_pool() when using stored versions
+        Result<void> load_stored_pool(const dp::String &version_label) { return load_version(version_label); }
+
+        // Quick swap using stored version (if available)
+        Result<void> quick_swap_to_version(const dp::String &version_label) {
+            if (state_.state() != VTState::Connected) {
+                return Result<void>::err(Error::not_connected());
+            }
+            return load_version(version_label);
+        }
+
         // ─── Language Management ──────────────────────────────────────────────────
         void set_language(const LanguageCode &lang) { current_language_ = lang; }
         void set_language(const dp::String &lang_str) { current_language_ = LanguageCode::from_string(lang_str); }
