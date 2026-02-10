@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.0.20] - 2026-02-10
+
+### <!-- 0 -->⛰️  Features
+
+- Add comprehensive demos for new diagnostic and VT features
+- Add comprehensive tests for new DM codes and fix bugs (ISO 11783-12 Phase 4)
+- Implement VT Version 6 advanced features
+- Add dynamic VT object pool swapping
+- Implement missing diagnostic messages (DM4, DM6-8, DM12, DM21, DM23)
+- Complete ISO 11783-8 powertrain implementation
+
 ## [0.0.19] - 2026-02-10
 
 ### <!-- 0 -->⛰️  Features
