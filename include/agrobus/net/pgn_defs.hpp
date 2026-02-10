@@ -150,10 +150,14 @@ namespace agrobus::net {
     inline constexpr PGN PGN_ENGINE_HOURS = 0x0FEE5;       // Engine Hours
     inline constexpr PGN PGN_FUEL_ECONOMY = 0x0FEF2;       // Fuel Economy
     inline constexpr PGN PGN_FUEL_CONSUMPTION = 0x0FEE9;   // Fuel Consumption
-    inline constexpr PGN PGN_TRANSMISSION_1 = 0x0F005;     // Transmission Control 1
+    inline constexpr PGN PGN_ETC1 = 0x0F005;               // Electronic Transmission Controller 1
+    inline constexpr PGN PGN_ETC2 = 0x0F006;               // Electronic Transmission Controller 2
+    inline constexpr PGN PGN_TRANSMISSION_1 = PGN_ETC1;    // Alias for backwards compatibility
     inline constexpr PGN PGN_CRUISE_CONTROL = 0x0FEF1;     // Cruise Control/Vehicle Speed
     inline constexpr PGN PGN_TSC1 = 0x0F006;               // Torque/Speed Control 1
     inline constexpr PGN PGN_VEP1 = 0x0F009;               // Vehicle Electrical Power 1
+    inline constexpr PGN PGN_AT1 = 0x0FEF5;                // Aftertreatment 1
+    inline constexpr PGN PGN_AT2 = 0x0FE46;                // Aftertreatment 2
     inline constexpr PGN PGN_AMBIENT_CONDITIONS = 0x0FEF5; // Ambient Conditions
     inline constexpr PGN PGN_DASH_DISPLAY = 0x0FEFC;       // Dash Display
     inline constexpr PGN PGN_VEHICLE_POSITION = 0x0FEF7;   // Vehicle Position (J1939)
