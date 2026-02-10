@@ -32,12 +32,20 @@ namespace agrobus::net {
     inline constexpr PGN PGN_DM1 = 0xFECA;
     inline constexpr PGN PGN_DM2 = 0xFECB;
     inline constexpr PGN PGN_DM3 = 0xFECC;
+    inline constexpr PGN PGN_DM4 = 0xFECD; // Driver's Information Message
+    inline constexpr PGN PGN_DM6 = 0xFECF; // Pending DTCs
+    inline constexpr PGN PGN_DM7 = 0xE300; // Command Non-Continuously Monitored Test
+    inline constexpr PGN PGN_DM8 = 0xFED5; // Test Results
+    inline constexpr PGN PGN_DM10 = 0xFDA4; // Product/Software ID
     inline constexpr PGN PGN_DM11 = 0xFED3;
+    inline constexpr PGN PGN_DM12 = 0xFED1; // Emissions-Related Active DTCs
     inline constexpr PGN PGN_DM13 = 0xDF00;
     inline constexpr PGN PGN_DM14 = 0xD900; // Memory access request
     inline constexpr PGN PGN_DM15 = 0xD800; // Memory access response
     inline constexpr PGN PGN_DM16 = 0xD700; // Binary data transfer
+    inline constexpr PGN PGN_DM21 = 0xC200; // Diagnostic Readiness 2
     inline constexpr PGN PGN_DM22 = 0xC300;
+    inline constexpr PGN PGN_DM23 = 0xFDB2; // Previously MIL-OFF DTCs
     inline constexpr PGN PGN_DIAGNOSTIC_PROTOCOL_ID = 0xFD32;
     inline constexpr PGN PGN_ECU_IDENTIFICATION = 0xFDC5;
 
@@ -150,10 +158,14 @@ namespace agrobus::net {
     inline constexpr PGN PGN_ENGINE_HOURS = 0x0FEE5;       // Engine Hours
     inline constexpr PGN PGN_FUEL_ECONOMY = 0x0FEF2;       // Fuel Economy
     inline constexpr PGN PGN_FUEL_CONSUMPTION = 0x0FEE9;   // Fuel Consumption
-    inline constexpr PGN PGN_TRANSMISSION_1 = 0x0F005;     // Transmission Control 1
+    inline constexpr PGN PGN_ETC1 = 0x0F005;               // Electronic Transmission Controller 1
+    inline constexpr PGN PGN_ETC2 = 0x0F006;               // Electronic Transmission Controller 2
+    inline constexpr PGN PGN_TRANSMISSION_1 = PGN_ETC1;    // Alias for backwards compatibility
     inline constexpr PGN PGN_CRUISE_CONTROL = 0x0FEF1;     // Cruise Control/Vehicle Speed
     inline constexpr PGN PGN_TSC1 = 0x0F006;               // Torque/Speed Control 1
     inline constexpr PGN PGN_VEP1 = 0x0F009;               // Vehicle Electrical Power 1
+    inline constexpr PGN PGN_AT1 = 0x0FEF5;                // Aftertreatment 1
+    inline constexpr PGN PGN_AT2 = 0x0FE46;                // Aftertreatment 2
     inline constexpr PGN PGN_AMBIENT_CONDITIONS = 0x0FEF5; // Ambient Conditions
     inline constexpr PGN PGN_DASH_DISPLAY = 0x0FEFC;       // Dash Display
     inline constexpr PGN PGN_VEHICLE_POSITION = 0x0FEF7;   // Vehicle Position (J1939)

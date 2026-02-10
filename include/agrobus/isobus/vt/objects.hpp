@@ -53,7 +53,15 @@ namespace agrobus::isobus::vt {
         ScaledGraphic = 37,
         Animation = 38,
         ColourMap = 39,
-        GraphicContext = 40
+        GraphicContext = 40,
+        // VT Version 6 additions (ISO 11783-6 Ed.4, 2018)
+        ExternalObjectDefinition = 41,
+        ExternalReferenceName = 42,
+        ExternalObjectPointer = 43,
+        ColourPalette = 44,
+        GraphicsContext = 45,
+        ObjectLabelRef = 46,
+        ScaledBitmap = 47
     };
 
     // ─── Type-Specific Object Bodies ────────────────────────────────────────────
@@ -613,5 +621,241 @@ namespace agrobus::isobus::vt {
         obj.set_id(id).set_type(ObjectType::AlarmMask).set_alarm_mask_body(body);
         return obj;
     }
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // VT Version 6 Advanced Features (ISO 11783-6 Edition 4, 2018)
+    // ═════════════════════════════════════════════════════════════════════════════
+
+    // ─── Touch Gesture Support ───────────────────────────────────────────────────
+    enum class GestureType : u8 {
+        None = 0,
+        Tap = 1,
+        DoubleTap = 2,
+        LongPress = 3,
+        SwipeLeft = 4,
+        SwipeRight = 5,
+        SwipeUp = 6,
+        SwipeDown = 7,
+        PinchIn = 8,     // Zoom out
+        PinchOut = 9,    // Zoom in
+        Rotate = 10,
+        TwoFingerTap = 11,
+        ThreeFingerTap = 12
+    };
+
+    struct TouchGesture {
+        GestureType type = GestureType::None;
+        i16 x = 0;          // Touch X coordinate (pixels)
+        i16 y = 0;          // Touch Y coordinate (pixels)
+        u16 duration_ms = 0; // Gesture duration (for long press)
+        i16 distance = 0;    // Swipe distance (pixels)
+        f32 scale = 1.0f;    // Pinch scale factor (1.0 = no change)
+        f32 rotation_deg = 0.0f; // Rotation angle (degrees)
+        u8 touch_count = 1;  // Number of simultaneous touches
+        ObjectID target_object = 0xFFFF; // Object that received gesture
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(static_cast<u8>(type));
+            data.push_back(static_cast<u8>(x & 0xFF));
+            data.push_back(static_cast<u8>((x >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(y & 0xFF));
+            data.push_back(static_cast<u8>((y >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(duration_ms & 0xFF));
+            data.push_back(static_cast<u8>((duration_ms >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(distance & 0xFF));
+            data.push_back(static_cast<u8>((distance >> 8) & 0xFF));
+            data.push_back(touch_count);
+            data.push_back(static_cast<u8>(target_object & 0xFF));
+            data.push_back(static_cast<u8>((target_object >> 8) & 0xFF));
+            return data;
+        }
+
+        static TouchGesture decode(const dp::Vector<u8> &data) {
+            TouchGesture gesture;
+            if (data.size() < 12)
+                return gesture;
+            gesture.type = static_cast<GestureType>(data[0]);
+            gesture.x = static_cast<i16>(static_cast<u16>(data[1]) | (static_cast<u16>(data[2]) << 8));
+            gesture.y = static_cast<i16>(static_cast<u16>(data[3]) | (static_cast<u16>(data[4]) << 8));
+            gesture.duration_ms = static_cast<u16>(data[5]) | (static_cast<u16>(data[6]) << 8);
+            gesture.distance = static_cast<i16>(static_cast<u16>(data[7]) | (static_cast<u16>(data[8]) << 8));
+            gesture.touch_count = data[9];
+            gesture.target_object = static_cast<u16>(data[10]) | (static_cast<u16>(data[11]) << 8);
+            return gesture;
+        }
+    };
+
+    // ─── Extended Graphics Context (VT6) ─────────────────────────────────────────
+    struct GraphicsContextV6 {
+        u8 transparency = 0xFF;      // 0-255 (0=fully transparent, 255=opaque)
+        u8 line_style = 0;           // 0=solid, 1=dashed, 2=dotted
+        u16 line_width = 1;          // Line width in pixels
+        u32 fill_color_rgb = 0;      // 24-bit RGB color (VT6)
+        u32 line_color_rgb = 0;      // 24-bit RGB color (VT6)
+        bool anti_aliasing = false;  // Enable anti-aliasing
+        u8 blend_mode = 0;           // 0=normal, 1=multiply, 2=screen, 3=overlay
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(transparency);
+            data.push_back(line_style);
+            data.push_back(static_cast<u8>(line_width & 0xFF));
+            data.push_back(static_cast<u8>((line_width >> 8) & 0xFF));
+            // 24-bit RGB fill color
+            data.push_back(static_cast<u8>(fill_color_rgb & 0xFF));
+            data.push_back(static_cast<u8>((fill_color_rgb >> 8) & 0xFF));
+            data.push_back(static_cast<u8>((fill_color_rgb >> 16) & 0xFF));
+            // 24-bit RGB line color
+            data.push_back(static_cast<u8>(line_color_rgb & 0xFF));
+            data.push_back(static_cast<u8>((line_color_rgb >> 8) & 0xFF));
+            data.push_back(static_cast<u8>((line_color_rgb >> 16) & 0xFF));
+            data.push_back(anti_aliasing ? 0x01 : 0x00);
+            data.push_back(blend_mode);
+            return data;
+        }
+
+        static GraphicsContextV6 decode(const dp::Vector<u8> &data) {
+            GraphicsContextV6 ctx;
+            if (data.size() < 12)
+                return ctx;
+            ctx.transparency = data[0];
+            ctx.line_style = data[1];
+            ctx.line_width = static_cast<u16>(data[2]) | (static_cast<u16>(data[3]) << 8);
+            ctx.fill_color_rgb = static_cast<u32>(data[4]) | (static_cast<u32>(data[5]) << 8) | (static_cast<u32>(data[6]) << 16);
+            ctx.line_color_rgb = static_cast<u32>(data[7]) | (static_cast<u32>(data[8]) << 8) | (static_cast<u32>(data[9]) << 16);
+            ctx.anti_aliasing = (data[10] != 0);
+            ctx.blend_mode = data[11];
+            return ctx;
+        }
+    };
+
+    // ─── External Object Definition (VT6) ────────────────────────────────────────
+    // Allows referencing objects from external libraries
+    struct ExternalObjectDefinitionBody {
+        u8 options = 0; // bit 0=enabled
+        ObjectID default_object_id = 0xFFFF; // Fallback if external not found
+        ObjectID external_reference_name = 0xFFFF; // Reference to name object
+        ObjectID external_object_id = 0xFFFF; // ID in external library
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(options);
+            data.push_back(static_cast<u8>(default_object_id & 0xFF));
+            data.push_back(static_cast<u8>((default_object_id >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(external_reference_name & 0xFF));
+            data.push_back(static_cast<u8>((external_reference_name >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(external_object_id & 0xFF));
+            data.push_back(static_cast<u8>((external_object_id >> 8) & 0xFF));
+            return data;
+        }
+
+        static Result<ExternalObjectDefinitionBody> decode(const dp::Vector<u8> &data) {
+            if (data.size() < 7)
+                return Result<ExternalObjectDefinitionBody>::err(Error::invalid_data("External Object Definition body too short"));
+            ExternalObjectDefinitionBody ext;
+            ext.options = data[0];
+            ext.default_object_id = static_cast<u16>(data[1]) | (static_cast<u16>(data[2]) << 8);
+            ext.external_reference_name = static_cast<u16>(data[3]) | (static_cast<u16>(data[4]) << 8);
+            ext.external_object_id = static_cast<u16>(data[5]) | (static_cast<u16>(data[6]) << 8);
+            return Result<ExternalObjectDefinitionBody>::ok(std::move(ext));
+        }
+    };
+
+    // ─── Scaled Bitmap (VT6) ─────────────────────────────────────────────────────
+    // Enhanced bitmap with scaling and transformation support
+    struct ScaledBitmapBody {
+        u16 width = 0;
+        u16 height = 0;
+        f32 scale_x = 1.0f;
+        f32 scale_y = 1.0f;
+        i16 offset_x = 0;
+        i16 offset_y = 0;
+        u8 format = 0; // 0=1bit, 1=4bit, 2=8bit, 3=24bit RGB
+        u8 options = 0; // bit 0=RLE compressed
+        ObjectID bitmap_data = 0xFFFF;
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data;
+            data.push_back(static_cast<u8>(width & 0xFF));
+            data.push_back(static_cast<u8>((width >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(height & 0xFF));
+            data.push_back(static_cast<u8>((height >> 8) & 0xFF));
+            // Scale factors as u16 fixed-point (8.8)
+            u16 sx = static_cast<u16>(scale_x * 256.0f);
+            u16 sy = static_cast<u16>(scale_y * 256.0f);
+            data.push_back(static_cast<u8>(sx & 0xFF));
+            data.push_back(static_cast<u8>((sx >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(sy & 0xFF));
+            data.push_back(static_cast<u8>((sy >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(offset_x & 0xFF));
+            data.push_back(static_cast<u8>((offset_x >> 8) & 0xFF));
+            data.push_back(static_cast<u8>(offset_y & 0xFF));
+            data.push_back(static_cast<u8>((offset_y >> 8) & 0xFF));
+            data.push_back(format);
+            data.push_back(options);
+            data.push_back(static_cast<u8>(bitmap_data & 0xFF));
+            data.push_back(static_cast<u8>((bitmap_data >> 8) & 0xFF));
+            return data;
+        }
+
+        static Result<ScaledBitmapBody> decode(const dp::Vector<u8> &data) {
+            if (data.size() < 16)
+                return Result<ScaledBitmapBody>::err(Error::invalid_data("Scaled Bitmap body too short"));
+            ScaledBitmapBody bmp;
+            bmp.width = static_cast<u16>(data[0]) | (static_cast<u16>(data[1]) << 8);
+            bmp.height = static_cast<u16>(data[2]) | (static_cast<u16>(data[3]) << 8);
+            u16 sx = static_cast<u16>(data[4]) | (static_cast<u16>(data[5]) << 8);
+            u16 sy = static_cast<u16>(data[6]) | (static_cast<u16>(data[7]) << 8);
+            bmp.scale_x = static_cast<f32>(sx) / 256.0f;
+            bmp.scale_y = static_cast<f32>(sy) / 256.0f;
+            bmp.offset_x = static_cast<i16>(static_cast<u16>(data[8]) | (static_cast<u16>(data[9]) << 8));
+            bmp.offset_y = static_cast<i16>(static_cast<u16>(data[10]) | (static_cast<u16>(data[11]) << 8));
+            bmp.format = data[12];
+            bmp.options = data[13];
+            bmp.bitmap_data = static_cast<u16>(data[14]) | (static_cast<u16>(data[15]) << 8);
+            return Result<ScaledBitmapBody>::ok(std::move(bmp));
+        }
+    };
+
+    // ─── Colour Palette (VT6 24-bit color support) ───────────────────────────────
+    struct ColourPaletteEntry {
+        u32 rgb = 0; // 24-bit RGB color
+        dp::String name; // Optional color name
+    };
+
+    struct ColourPalette {
+        dp::Vector<ColourPaletteEntry> entries;
+
+        void add_color(u32 rgb, const dp::String &name = "") {
+            ColourPaletteEntry entry;
+            entry.rgb = rgb;
+            entry.name = name;
+            entries.push_back(entry);
+        }
+
+        // Standard palette initialization (VT6 extended colors)
+        static ColourPalette create_standard_v6() {
+            ColourPalette palette;
+            // Add standard VT6 extended colors (24-bit RGB)
+            palette.add_color(0x000000, "black");
+            palette.add_color(0xFFFFFF, "white");
+            palette.add_color(0xFF0000, "red");
+            palette.add_color(0x00FF00, "green");
+            palette.add_color(0x0000FF, "blue");
+            palette.add_color(0xFFFF00, "yellow");
+            palette.add_color(0xFF00FF, "magenta");
+            palette.add_color(0x00FFFF, "cyan");
+            palette.add_color(0x808080, "gray");
+            palette.add_color(0xFFA500, "orange");
+            palette.add_color(0x800080, "purple");
+            palette.add_color(0xA52A2A, "brown");
+            palette.add_color(0xFFC0CB, "pink");
+            palette.add_color(0x00FF7F, "spring green");
+            palette.add_color(0x4B0082, "indigo");
+            palette.add_color(0xFF6347, "tomato");
+            return palette;
+        }
+    };
 
 } // namespace agrobus::isobus::vt

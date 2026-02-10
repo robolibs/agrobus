@@ -119,6 +119,43 @@ namespace agrobus::j1939 {
         }
     };
 
+    // ─── Engine Temperature 2 (ET2, PGN 0x0FEED) ────────────────────────────────
+    struct EngineTemp2 {
+        f64 engine_oil_temp_c = -40.0;    // SPN 175: 0.03125 C/bit, offset -273
+        f64 turbo_oil_temp_c = -40.0;     // SPN 176: 0.03125 C/bit, offset -273
+        f64 engine_intercooler_temp_c = -40.0; // SPN 52: 1 C/bit, offset -40
+        f64 turbo_1_temp_c = -40.0;       // SPN 1134: 0.03125 C/bit, offset -273
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data(8, 0xFF);
+            u16 oil = static_cast<u16>((engine_oil_temp_c + 273.0) / 0.03125);
+            data[0] = static_cast<u8>(oil & 0xFF);
+            data[1] = static_cast<u8>((oil >> 8) & 0xFF);
+            u16 turbo_oil = static_cast<u16>((turbo_oil_temp_c + 273.0) / 0.03125);
+            data[2] = static_cast<u8>(turbo_oil & 0xFF);
+            data[3] = static_cast<u8>((turbo_oil >> 8) & 0xFF);
+            data[4] = static_cast<u8>(engine_intercooler_temp_c + 40.0);
+            u16 turbo1 = static_cast<u16>((turbo_1_temp_c + 273.0) / 0.03125);
+            data[5] = static_cast<u8>(turbo1 & 0xFF);
+            data[6] = static_cast<u8>((turbo1 >> 8) & 0xFF);
+            return data;
+        }
+
+        static EngineTemp2 decode(const dp::Vector<u8> &data) {
+            EngineTemp2 msg;
+            if (data.size() >= 7) {
+                u16 oil = static_cast<u16>(data[0]) | (static_cast<u16>(data[1]) << 8);
+                msg.engine_oil_temp_c = oil * 0.03125 - 273.0;
+                u16 turbo_oil = static_cast<u16>(data[2]) | (static_cast<u16>(data[3]) << 8);
+                msg.turbo_oil_temp_c = turbo_oil * 0.03125 - 273.0;
+                msg.engine_intercooler_temp_c = static_cast<f64>(data[4]) - 40.0;
+                u16 turbo1 = static_cast<u16>(data[5]) | (static_cast<u16>(data[6]) << 8);
+                msg.turbo_1_temp_c = turbo1 * 0.03125 - 273.0;
+            }
+            return msg;
+        }
+    };
+
     // ─── Engine Fluid Level/Pressure (EFLP, PGN 0x0FEEF) ────────────────────────
     struct EngineFluidLP {
         f64 oil_pressure_kpa = 0.0;           // SPN 100: 4 kPa/bit
@@ -453,6 +490,77 @@ namespace agrobus::j1939 {
         }
     };
 
+    // ─── Aftertreatment 1 (AT1, PGN 65269 / 0x0FEF5) ────────────────────────────
+    struct Aftertreatment1 {
+        f64 diesel_exhaust_fluid_tank_level = 0.0; // SPN 1761: 0.4% per bit
+        f64 intake_nox_ppm = 0.0;                  // SPN 3216: 0.05 ppm per bit, 2 bytes
+        f64 outlet_nox_ppm = 0.0;                  // SPN 3226: 0.05 ppm per bit, 2 bytes
+        f64 intake_nox_reading_status = 0xFF;      // SPN 3241: status
+        f64 outlet_nox_reading_status = 0xFF;      // SPN 3242: status
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data(8, 0xFF);
+            data[0] = static_cast<u8>(diesel_exhaust_fluid_tank_level / 0.4);
+            u16 intake = static_cast<u16>(intake_nox_ppm / 0.05);
+            data[1] = static_cast<u8>(intake & 0xFF);
+            data[2] = static_cast<u8>((intake >> 8) & 0xFF);
+            u16 outlet = static_cast<u16>(outlet_nox_ppm / 0.05);
+            data[3] = static_cast<u8>(outlet & 0xFF);
+            data[4] = static_cast<u8>((outlet >> 8) & 0xFF);
+            data[5] = static_cast<u8>(intake_nox_reading_status);
+            data[6] = static_cast<u8>(outlet_nox_reading_status);
+            return data;
+        }
+
+        static Aftertreatment1 decode(const dp::Vector<u8> &data) {
+            Aftertreatment1 msg;
+            if (data.size() >= 7) {
+                msg.diesel_exhaust_fluid_tank_level = static_cast<f64>(data[0]) * 0.4;
+                u16 intake = static_cast<u16>(data[1]) | (static_cast<u16>(data[2]) << 8);
+                msg.intake_nox_ppm = intake * 0.05;
+                u16 outlet = static_cast<u16>(data[3]) | (static_cast<u16>(data[4]) << 8);
+                msg.outlet_nox_ppm = outlet * 0.05;
+                msg.intake_nox_reading_status = data[5];
+                msg.outlet_nox_reading_status = data[6];
+            }
+            return msg;
+        }
+    };
+
+    // ─── Aftertreatment 2 (AT2, PGN 65110 / 0x0FE46) ────────────────────────────
+    struct Aftertreatment2 {
+        f64 dpf_differential_pressure_kpa = 0.0;      // SPN 3719: 0.1 kPa per bit, 2 bytes
+        f64 diesel_exhaust_fluid_concentration = 0.0; // SPN 4331: 0.4% per bit
+        f64 dpf_soot_load_percent = 0.0;              // SPN 3720: 0.4% per bit
+        u8 dpf_active_regeneration_status = 0xFF;     // SPN 3700: status
+        u8 dpf_passive_regeneration_status = 0xFF;    // SPN 3701: status
+
+        dp::Vector<u8> encode() const {
+            dp::Vector<u8> data(8, 0xFF);
+            u16 diff_press = static_cast<u16>(dpf_differential_pressure_kpa / 0.1);
+            data[0] = static_cast<u8>(diff_press & 0xFF);
+            data[1] = static_cast<u8>((diff_press >> 8) & 0xFF);
+            data[2] = static_cast<u8>(diesel_exhaust_fluid_concentration / 0.4);
+            data[3] = static_cast<u8>(dpf_soot_load_percent / 0.4);
+            data[4] = dpf_active_regeneration_status;
+            data[5] = dpf_passive_regeneration_status;
+            return data;
+        }
+
+        static Aftertreatment2 decode(const dp::Vector<u8> &data) {
+            Aftertreatment2 msg;
+            if (data.size() >= 6) {
+                u16 diff_press = static_cast<u16>(data[0]) | (static_cast<u16>(data[1]) << 8);
+                msg.dpf_differential_pressure_kpa = diff_press * 0.1;
+                msg.diesel_exhaust_fluid_concentration = static_cast<f64>(data[2]) * 0.4;
+                msg.dpf_soot_load_percent = static_cast<f64>(data[3]) * 0.4;
+                msg.dpf_active_regeneration_status = data[4];
+                msg.dpf_passive_regeneration_status = data[5];
+            }
+            return msg;
+        }
+    };
+
     // ─── Component Identification (PGN 0x0FEEB) ──────────────────────────────────
     // Variable-length, asterisk-delimited string: Make*Model*SerialNumber*UnitNumber*
     struct ComponentIdentification {
@@ -552,6 +660,9 @@ namespace agrobus::j1939 {
             net_.register_pgn_callback(PGN_ET1, [this](const Message &msg) {
                 on_engine_temp.emit(EngineTemp1::decode(msg.data), msg.source);
             });
+            net_.register_pgn_callback(PGN_ET2, [this](const Message &msg) {
+                on_engine_temp2.emit(EngineTemp2::decode(msg.data), msg.source);
+            });
             net_.register_pgn_callback(PGN_EFLP, [this](const Message &msg) {
                 on_engine_fluid.emit(EngineFluidLP::decode(msg.data), msg.source);
             });
@@ -585,6 +696,12 @@ namespace agrobus::j1939 {
             net_.register_pgn_callback(PGN_VEHICLE_ID, [this](const Message &msg) {
                 on_vehicle_id.emit(VehicleIdentification::decode(msg.data), msg.source);
             });
+            net_.register_pgn_callback(PGN_AT1, [this](const Message &msg) {
+                on_aftertreatment1.emit(Aftertreatment1::decode(msg.data), msg.source);
+            });
+            net_.register_pgn_callback(PGN_AT2, [this](const Message &msg) {
+                on_aftertreatment2.emit(Aftertreatment2::decode(msg.data), msg.source);
+            });
             echo::category("isobus.j1939.engine").debug("initialized");
             return {};
         }
@@ -598,6 +715,9 @@ namespace agrobus::j1939 {
         }
         Result<void> send_engine_temp(const EngineTemp1 &msg) {
             return net_.send(PGN_ET1, msg.encode(), cf_, nullptr, Priority::Default);
+        }
+        Result<void> send_engine_temp2(const EngineTemp2 &msg) {
+            return net_.send(PGN_ET2, msg.encode(), cf_, nullptr, Priority::Default);
         }
         Result<void> send_engine_fluid(const EngineFluidLP &msg) {
             return net_.send(PGN_EFLP, msg.encode(), cf_, nullptr, Priority::Default);
@@ -635,6 +755,12 @@ namespace agrobus::j1939 {
         Result<void> send_vehicle_id(const VehicleIdentification &msg) {
             return net_.send(PGN_VEHICLE_ID, msg.encode(), cf_);
         }
+        Result<void> send_aftertreatment1(const Aftertreatment1 &msg) {
+            return net_.send(PGN_AT1, msg.encode(), cf_, nullptr, Priority::Default);
+        }
+        Result<void> send_aftertreatment2(const Aftertreatment2 &msg) {
+            return net_.send(PGN_AT2, msg.encode(), cf_, nullptr, Priority::Default);
+        }
 
         // Events
         Event<EEC1, Address> on_eec1;
@@ -646,10 +772,13 @@ namespace agrobus::j1939 {
         Event<DashDisplay, Address> on_dash_display;
         Event<VehiclePosition, Address> on_vehicle_position;
         Event<EngineTemp1, Address> on_engine_temp;
+        Event<EngineTemp2, Address> on_engine_temp2;
         Event<EngineFluidLP, Address> on_engine_fluid;
         Event<EngineHours, Address> on_engine_hours;
         Event<FuelEconomy, Address> on_fuel_economy;
         Event<FuelConsumption, Address> on_fuel_consumption;
+        Event<Aftertreatment1, Address> on_aftertreatment1;
+        Event<Aftertreatment2, Address> on_aftertreatment2;
         Event<ComponentIdentification, Address> on_component_id;
         Event<VehicleIdentification, Address> on_vehicle_id;
     };
